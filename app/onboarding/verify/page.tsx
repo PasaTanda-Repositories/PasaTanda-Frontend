@@ -33,6 +33,7 @@ import Footer from '../../components/Footer';
 import { GlassCard } from '../../components/GlassCard';
 import { useI18n } from '../../lib/i18n';
 import { useMounted } from '../../lib/useMounted';
+import { ZkLoginSession, getStoredSession } from '../../lib/zklogin';
 
 const frequencyOptions = [
   { value: 7, labelEs: 'Semanal (7 días)', labelEn: 'Weekly (7 days)' },
@@ -97,6 +98,7 @@ export default function OnboardingVerifyPage() {
   const { t, locale } = useI18n();
   const router = useRouter();
   const mounted = useMounted();
+  const [zkSession, setZkSession] = useState<ZkLoginSession | null>(null);
   
   // Stage control - 5 stages total following onboarding-flow.md
   const [currentStage, setCurrentStage] = useState(1);
@@ -166,6 +168,10 @@ export default function OnboardingVerifyPage() {
     },
   };
 
+  useEffect(() => {
+    setZkSession(getStoredSession());
+  }, []);
+
   // Calculate frequency to send
   const getFrequencyToSend = () => {
     if (frequencyDays === -1) {
@@ -186,7 +192,7 @@ export default function OnboardingVerifyPage() {
     const frequencyToSend = getFrequencyToSend();
     switch (stage) {
       case 1:
-        return groupName.trim() !== '' && Number(totalAmount) > 0;
+        return Boolean(zkSession) && groupName.trim() !== '' && Number(totalAmount) > 0;
       case 2:
         return frequencyToSend > 0;
       case 3:
@@ -376,6 +382,11 @@ export default function OnboardingVerifyPage() {
 
   // Navigation handlers
   const goToNextStage = () => {
+    if (!zkSession) {
+      setMessage({ type: 'error', text: t.login.sessionMissing });
+      return;
+    }
+
     if (canProceedFromStage(currentStage)) {
       setMessage(null);
       setCurrentStage(prev => Math.min(prev + 1, 5));
@@ -861,6 +872,33 @@ export default function OnboardingVerifyPage() {
             </Stack>
           </Box>
         </Fade>
+
+        <Box sx={{ maxWidth: 650, mb: 3 }}>
+          {zkSession ? (
+            <Alert severity="success" sx={{ borderRadius: 2 }}>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} alignItems={{ xs: 'flex-start', sm: 'center' }}>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {t.login.sessionReady}
+                </Typography>
+                <Typography variant="body2" sx={{ wordBreak: 'break-all' }}>
+                  {t.login.addressLabel}: {zkSession.address}
+                </Typography>
+              </Stack>
+            </Alert>
+          ) : (
+            <Alert
+              severity="warning"
+              action={
+                <Button component={Link} href="/auth/login" size="small" variant="outlined">
+                  {t.nav.login}
+                </Button>
+              }
+              sx={{ borderRadius: 2 }}
+            >
+              {t.login.sessionMissing}
+            </Alert>
+          )}
+        </Box>
 
         {/* Main content area */}
         <Box

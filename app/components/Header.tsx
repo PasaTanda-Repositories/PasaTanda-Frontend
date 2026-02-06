@@ -9,6 +9,7 @@ import LanguageSwitch from './LanguageSwitch';
 const navLinks = [
   { href: '/', key: 'home' as const },
   { href: '/pagos', key: 'pay' as const },
+  { href: '/auth/login', key: 'login' as const },
   { href: '/onboarding/verify', key: 'onboarding' as const },
   { href: '/docs', key: 'docs' as const },
 ];

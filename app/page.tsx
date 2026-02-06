@@ -295,7 +295,7 @@ export default function Home() {
                           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
                             <Button
                               component={Link}
-                              href="/onboarding/verify"
+                              href="/auth/login"
                               variant="contained"
                               size="large"
                               endIcon={<ArrowForwardIcon />}
