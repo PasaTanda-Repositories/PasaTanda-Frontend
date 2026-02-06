@@ -1,0 +1,345 @@
+"use client";
+
+import { createContext, useCallback, useContext, useMemo, useSyncExternalStore } from "react";
+
+export type Locale = "es" | "en";
+
+const translations = {
+  es: {
+    nav: {
+      home: "Inicio",
+      pay: "Pagos",
+      onboarding: "Onboarding",
+      docs: "Documentación",
+      tos: "Términos",
+      privacy: "Privacidad",
+    },
+    hero: {
+      title: "PasaTanda, ahorro rotativo sobre Sui",
+      subtitle:
+        "Organiza tandas confiables con on/off ramp bancario, contratos Move y flujos guiados por WhatsApp.",
+      primaryCta: "Crear tanda",
+      secondaryCta: "Ver pagos",
+      metrics: [
+        { label: "Liquidaciones 24/7", value: "Sui + EVM" },
+        { label: "On/Off ramp", value: "QR bancario" },
+        { label: "Custodia", value: "Move" },
+      ],
+    },
+    valueProps: {
+      sui: {
+        title: "Seguridad sobre Sui",
+        body:
+          "Firmas con ZKLogin para validar pagos sin exponer llaves. Los contratos Move registran turnos y fondos.",
+      },
+      onramp: {
+        title: "On-ramp / Off-ramp local",
+        body:
+          "Pagos vía QR bancario o USDC. El backend verifica comprobantes y genera órdenes con links dinámicos.",
+      },
+      automation: {
+        title: "Automatización por WhatsApp",
+        body:
+          "El bot guía a los miembros: recordatorios, verificación de pagos y activación de la tanda desde el chat.",
+      },
+    },
+    howItWorks: {
+      title: "Cómo funciona",
+      steps: [
+        "Crea tu cuenta con ZKLogin y crea un grupo de ahorro.",
+        "Invita a tus amigos a registrarse.",
+        "Da inicio a la tanda y deja que el bot la gestione automáticamente.",
+      ],
+    },
+    tos: {
+      title: "Términos de Servicio",
+      lastUpdated: "Última actualización",
+      intro: "Estos términos de servicio regulan el uso de la plataforma PasaTanda. Por favor, léelos cuidadosamente antes de utilizar nuestros servicios.",
+      sections: {
+        acceptance: {
+          title: "1. Aceptación de los Términos",
+          content: "Al utilizar PasaTanda, aceptas cumplir con estos términos de servicio y todas las leyes aplicables. Si no estás de acuerdo con alguno de estos términos, no debes usar la plataforma.",
+        },
+        description: {
+          title: "2. Descripción del Servicio",
+          content: "PasaTanda es una plataforma que facilita la gestión de tandas (ROSCA/Pasanaku) utilizando la blockchain de Sui. Proporcionamos herramientas para organizar grupos, gestionar pagos y automatizar la distribución de fondos.",
+        },
+        responsibilities: {
+          title: "3. Responsabilidades del Usuario",
+          items: [
+            "Mantener la seguridad de sus \"salts\" y cuentas de inicio de sesion.",
+            "Proporcionar información veraz durante el registro",
+            "Cumplir con los pagos acordados dentro del grupo",
+            "No utilizar la plataforma para actividades ilegales",
+          ],
+        },
+        participation: {
+          title: "4. Participación en Tandas",
+          content: "Al unirte a una tanda, te comprometes a realizar los pagos según el calendario establecido. El incumplimiento puede resultar en la pérdida de tu turno y restricciones en la plataforma.",
+        },
+        liability: {
+          title: "5. Limitación de Responsabilidad",
+          content: "PasaTanda actúa únicamente como facilitador tecnológico. No somos responsables de disputas entre participantes, pérdidas por errores de usuario o fluctuaciones en el valor de activos digitales.",
+        },
+        modifications: {
+          title: "6. Modificaciones",
+          content: "Nos reservamos el derecho de modificar estos términos en cualquier momento. Los cambios entrarán en vigor al ser publicados en la plataforma. El uso continuado del servicio después de las modificaciones constituye la aceptación de los nuevos términos.",
+        },
+      },
+      contact: "Para consultas sobre estos términos, contacta a:",
+    },
+    privacy: {
+      title: "Políticas de Privacidad",
+      lastUpdated: "Última actualización",
+      intro: "En PasaTanda, valoramos tu privacidad y nos comprometemos a proteger tus datos. Esta política describe cómo recopilamos, usamos y protegemos tu información.",
+      sections: {
+        collection: {
+          title: "1. Información que Recopilamos",
+          content: "PasaTanda minimiza la recopilación de datos personales. No almacenamos información personal sensible. Las direcciones de wallet y transacciones son registradas en la blockchain de Sui de forma pública y transparente.",
+        },
+        usage: {
+          title: "2. Uso de la Información",
+          content: "La información de las transacciones es pública en la blockchain de Sui y se utiliza únicamente para verificar pagos, gestionar turnos de la tanda y mantener el registro del contrato inteligente.",
+        },
+        security: {
+          title: "3. Seguridad",
+          content: "Nos comprometemos a proteger la seguridad de tu información mediante el uso de tecnología blockchain y contratos inteligentes auditables. Las llaves privadas nunca son almacenadas en nuestros servidores.",
+        },
+        rights: {
+          title: "4. Tus Derechos",
+          content: "Tienes derecho a acceder, rectificar y eliminar tus datos personales (cuando no estén en blockchain). Para ejercer estos derechos, contacta a nuestro equipo de soporte.",
+        },
+      },
+      contact: "Si tienes preguntas sobre esta política de privacidad o sobre cómo manejamos tus datos, puedes contactarnos a través de nuestro canal de WhatsApp o por correo electrónico.",
+    },
+    common: {
+      loading: "Cargando...",
+      error: "Error",
+      success: "Éxito",
+      cancel: "Cancelar",
+      confirm: "Confirmar",
+      back: "Volver",
+      next: "Siguiente",
+      save: "Guardar",
+      delete: "Eliminar",
+      edit: "Editar",
+      close: "Cerrar",
+      retry: "Reintentar",
+      copied: "¡Copiado!",
+      copyToClipboard: "Copiar al portapapeles",
+    },
+    footer: {
+      tagline: "Ahorro colaborativo sobre Sui",
+      links: "Enlaces",
+      legal: "Legal",
+      contact: "Contacto",
+      copyright: "Todos los derechos reservados.",
+    },
+  },
+  en: {
+    nav: {
+      home: "Home",
+      pay: "Payments",
+      onboarding: "Onboarding",
+      docs: "Docs",
+      tos: "Terms",
+      privacy: "Privacy",
+    },
+    hero: {
+      title: "PasaTanda, rotating savings on Sui",
+      subtitle:
+        "Run trusted ROSCAs with local on/off ramps, Move contracts, and WhatsApp automation.",
+      primaryCta: "Start a tanda",
+      secondaryCta: "Open payments",
+      metrics: [
+        { label: "24/7 settlement", value: "Sui + EVM" },
+        { label: "On/Off ramp", value: "Bank QR" },
+        { label: "Custody", value: "Move" },
+      ],
+    },
+    valueProps: {
+      sui: {
+        title: "Security on Sui",
+        body:
+          "ZKLogin signatures validate payments without exposing keys. Move contracts track rounds and funds.",
+      },
+      onramp: {
+        title: "Local on/off ramp",
+        body:
+          "Pay with bank QR or USDC. The backend verifies proofs and issues dynamic order links.",
+      },
+      automation: {
+        title: "WhatsApp automation",
+        body:
+          "The bot onboards members, reminds payments, and lets the admin activate the tanda from chat.",
+      },
+    },
+    howItWorks: {
+      title: "How it works",
+      steps: [
+        "Sign up with ZKLogin and create a savings group.",
+        "Invite your friends to register.",
+        "Start the tanda and let the bot manage it automatically.",
+      ],
+    },
+    tos: {
+      title: "Terms of Service",
+      lastUpdated: "Last updated",
+      intro: "These terms of service govern the use of the PasaTanda platform. Please read them carefully before using our services.",
+      sections: {
+        acceptance: {
+          title: "1. Acceptance of Terms",
+          content: "By using PasaTanda, you agree to comply with these terms of service and all applicable laws. If you do not agree with any of these terms, you should not use the platform.",
+        },
+        description: {
+          title: "2. Service Description",
+          content: "PasaTanda is a platform that facilitates the management of tandas (ROSCA/Pasanaku) using the Sui blockchain. We provide tools to organize groups, manage payments, and automate fund distribution.",
+        },
+        responsibilities: {
+          title: "3. User Responsibilities",
+          items: [
+            "Maintain the security of your \"salts\" and login accounts",
+            "Provide truthful information during registration",
+            "Comply with agreed payments within the group",
+            "Not use the platform for illegal activities",
+          ],
+        },
+        participation: {
+          title: "4. Tanda Participation",
+          content: "By joining a tanda, you commit to making payments according to the established schedule. Non-compliance may result in loss of your turn and platform restrictions.",
+        },
+        liability: {
+          title: "5. Limitation of Liability",
+          content: "PasaTanda acts solely as a technology facilitator. We are not responsible for disputes between participants, losses due to user errors, or fluctuations in the value of digital assets.",
+        },
+        modifications: {
+          title: "6. Modifications",
+          content: "We reserve the right to modify these terms at any time. Changes will take effect upon publication on the platform. Continued use of the service after modifications constitutes acceptance of the new terms.",
+        },
+      },
+      contact: "For inquiries about these terms, contact:",
+    },
+    privacy: {
+      title: "Privacy Policy",
+      lastUpdated: "Last updated",
+      intro: "At PasaTanda, we value your privacy and are committed to protecting your data. This policy describes how we collect, use, and protect your information.",
+      sections: {
+        collection: {
+          title: "1. Information We Collect",
+          content: "PasaTanda minimizes the collection of personal data. We do not store sensitive personal information. Wallet addresses and transactions are recorded on the Sui blockchain publicly and transparently.",
+        },
+        usage: {
+          title: "2. Use of Information",
+          content: "Transaction information is public on the Sui blockchain and is used solely to verify payments, manage tanda turns, and maintain the smart contract registry.",
+        },
+        security: {
+          title: "3. Security",
+          content: "We are committed to protecting the security of your information through the use of blockchain technology and auditable smart contracts. Private keys are never stored on our servers.",
+        },
+        rights: {
+          title: "4. Your Rights",
+          content: "You have the right to access, rectify, and delete your personal data (when not on blockchain). To exercise these rights, contact our support team.",
+        },
+      },
+      contact: "If you have questions about this privacy policy or how we handle your data, you can contact us through our WhatsApp channel or by email.",
+    },
+    common: {
+      loading: "Loading...",
+      error: "Error",
+      success: "Success",
+      cancel: "Cancel",
+      confirm: "Confirm",
+      back: "Back",
+      next: "Next",
+      save: "Save",
+      delete: "Delete",
+      edit: "Edit",
+      close: "Close",
+      retry: "Retry",
+      copied: "Copied!",
+      copyToClipboard: "Copy to clipboard",
+    },
+    footer: {
+      tagline: "Collaborative savings on Sui",
+      links: "Links",
+      legal: "Legal",
+      contact: "Contact",
+      copyright: "All rights reserved.",
+    },
+  },
+};
+
+type Messages = (typeof translations)[Locale];
+
+type I18nContextValue = {
+  locale: Locale;
+  setLocale: (locale: Locale) => void;
+  t: Messages;
+};
+
+const I18nContext = createContext<I18nContextValue | undefined>(undefined);
+
+// Create a simple store for locale
+let localeListeners: Array<() => void> = [];
+let currentLocale: Locale = "es";
+
+const localeStore = {
+  getSnapshot: () => currentLocale,
+  getServerSnapshot: () => "es" as Locale,
+  subscribe: (listener: () => void) => {
+    localeListeners.push(listener);
+    return () => {
+      localeListeners = localeListeners.filter(l => l !== listener);
+    };
+  },
+  setLocale: (newLocale: Locale) => {
+    currentLocale = newLocale;
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem("pt-lang", newLocale);
+      document.documentElement.lang = newLocale;
+    }
+    localeListeners.forEach(listener => listener());
+  },
+  initialize: () => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem("pt-lang");
+    if (stored === "en" || stored === "es") {
+      currentLocale = stored;
+    } else {
+      const lang = navigator.language?.toLowerCase() || "es";
+      currentLocale = lang.startsWith("en") ? "en" : "es";
+    }
+    document.documentElement.lang = currentLocale;
+  }
+};
+
+// Initialize on module load (client-side only)
+if (typeof window !== "undefined") {
+  localeStore.initialize();
+}
+
+export function I18nProvider({ children }: { children: React.ReactNode }) {
+  const locale = useSyncExternalStore(
+    localeStore.subscribe,
+    localeStore.getSnapshot,
+    localeStore.getServerSnapshot
+  );
+
+  const setLocale = useCallback((newLocale: Locale) => {
+    localeStore.setLocale(newLocale);
+  }, []);
+
+  const value = useMemo<I18nContextValue>(() => ({
+    locale,
+    setLocale,
+    t: translations[locale],
+  }), [locale, setLocale]);
+
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+}
+
+export function useI18n() {
+  const ctx = useContext(I18nContext);
+  if (!ctx) throw new Error("useI18n debe usarse dentro de I18nProvider");
+  return ctx;
+}
