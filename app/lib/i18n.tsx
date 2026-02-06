@@ -31,6 +31,8 @@ const translations = {
       callbackProcessing: "Procesando callback OAuth...",
       callbackSuccess: "¡Autenticación completada! Guardamos tu sesión zkLogin.",
       callbackError: "No pudimos completar el login. Vuelve a intentarlo.",
+      clearSession: "Limpiar sesión",
+      sessionCleared: "Sesión eliminada. Inicia sesión nuevamente.",
     },
     hero: {
       title: "PasaTanda, ahorro rotativo sobre Sui",
@@ -286,6 +288,8 @@ const translations = {
       callbackProcessing: "Processing OAuth callback...",
       callbackSuccess: "Authentication completed! zkLogin session saved.",
       callbackError: "We could not finish login. Please try again.",
+      clearSession: "Clear session",
+      sessionCleared: "Session cleared. Please sign in again.",
     },
     hero: {
       title: "PasaTanda, rotating savings on Sui",

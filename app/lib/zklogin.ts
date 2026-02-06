@@ -56,7 +56,8 @@ function fromBase64<T>(value: string | null): T | null {
 }
 
 function generateUserSalt(): string {
-  const array = new Uint8Array(32);
+  // El salt debe ser un valor de 16 bytes o menor a 2^128 según la doc de zkLogin
+  const array = new Uint8Array(16);
   crypto.getRandomValues(array);
   const hex = Array.from(array)
     .map((b) => b.toString(16).padStart(2, '0'))
@@ -64,12 +65,30 @@ function generateUserSalt(): string {
   return BigInt(`0x${hex}`).toString();
 }
 
+function isValidUserSalt(salt: string): boolean {
+  try {
+    const saltBigInt = BigInt(salt);
+    // El salt debe ser menor a 2^128 para estar en el campo BN254
+    const MAX_SALT = BigInt(2) ** BigInt(128);
+    return saltBigInt > 0 && saltBigInt < MAX_SALT;
+  } catch {
+    return false;
+  }
+}
+
 export function getStoredSession(): ZkLoginSession | null {
   if (typeof window === 'undefined') return null;
   const raw = localStorage.getItem(SESSION_KEY);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as ZkLoginSession;
+    const session = JSON.parse(raw) as ZkLoginSession;
+    // Validar que el userSalt sea válido (< 2^128)
+    if (!isValidUserSalt(session.userSalt)) {
+      console.warn('Sesión con userSalt inválido detectada, limpiando...');
+      clearSession();
+      return null;
+    }
+    return session;
   } catch {
     return null;
   }
@@ -120,7 +139,11 @@ export async function buildZkLoginRequest(provider: OAuthProvider) {
   const randomness = generateRandomness();
   const keypair = Ed25519Keypair.generate();
   const nonce = generateNonce(keypair.getPublicKey(), maxEpoch, randomness);
-  const userSalt = getStoredSession()?.userSalt || generateUserSalt();
+  
+  // Reusar o generar userSalt, validando que sea < 2^128
+  const existingSalt = getStoredSession()?.userSalt;
+  const userSalt = (existingSalt && isValidUserSalt(existingSalt)) ? existingSalt : generateUserSalt();
+  
   const redirectUri = getRedirectUri(typeof window !== 'undefined' ? window.location.origin : undefined);
 
   const state = toBase64({ nonce, provider });

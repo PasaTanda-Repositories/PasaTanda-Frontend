@@ -24,14 +24,14 @@ import { GlassCard } from '../../components/GlassCard';
 import ParticleBackground from '../../components/ParticleBackground';
 import { useI18n } from '../../lib/i18n';
 import { useMounted } from '../../lib/useMounted';
-import { OAuthProvider, ZkLoginSession, buildZkLoginRequest, getStoredSession } from '../../lib/zklogin';
+import { OAuthProvider, ZkLoginSession, buildZkLoginRequest, clearSession, getStoredSession } from '../../lib/zklogin';
 
 export default function LoginPage() {
   const { t } = useI18n();
   const mounted = useMounted();
   const [loadingProvider, setLoadingProvider] = useState<OAuthProvider | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [session] = useState<ZkLoginSession | null>(() => getStoredSession());
+  const [session, setSession] = useState<ZkLoginSession | null>(() => getStoredSession());
 
   const handleLogin = async (provider: OAuthProvider) => {
     setError(null);
@@ -45,6 +45,12 @@ export default function LoginPage() {
       setError(message);
       setLoadingProvider(null);
     }
+  };
+
+  const handleClearSession = () => {
+    clearSession();
+    setSession(null);
+    setError(null);
   };
 
   return (
@@ -176,6 +182,11 @@ export default function LoginPage() {
                       <Button component={Link} href="/onboarding/verify" variant="contained" disabled={!session}>
                         {t.login.continue}
                       </Button>
+                      {session && (
+                        <Button onClick={handleClearSession} variant="outlined" color="warning">
+                          {t.login.clearSession}
+                        </Button>
+                      )}
                       <Button component={Link} href="/auth/login" variant="outlined">
                         {t.login.retry}
                       </Button>

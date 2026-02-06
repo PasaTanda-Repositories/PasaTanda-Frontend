@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+// 1. Importa Suspense de react
+import { useEffect, useState, Suspense } from 'react';
 import {
   Alert,
   Box,
@@ -34,11 +35,13 @@ import {
 
 type StatePayload = { nonce: string; provider: OAuthProvider };
 
-export default function CallbackPage() {
+// 2. Renombramos tu componente original a "CallbackContent"
+//    y le quitamos el 'export default'
+function CallbackContent() {
   const { t } = useI18n();
   const mounted = useMounted();
   const router = useRouter();
-  const searchParams = useSearchParams();
+  const searchParams = useSearchParams(); // Esto es lo que causa el requisito de Suspense
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState<string>('');
   const [session, setSession] = useState<ZkLoginSession | null>(null);
@@ -198,5 +201,19 @@ export default function CallbackPage() {
         <Footer />
       </Box>
     </Box>
+  );
+}
+
+// 3. Creamos un componente "Wrapper" que será el Default Export
+export default function CallbackPage() {
+  return (
+    // El fallback es lo que se muestra mientras se carga el contenido dinámico (URL params)
+    <Suspense fallback={
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <CircularProgress />
+      </Box>
+    }>
+      <CallbackContent />
+    </Suspense>
   );
 }
