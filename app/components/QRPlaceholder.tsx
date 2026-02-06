@@ -13,6 +13,7 @@ export default function QRPlaceholder({
   text = 'QR Code' 
 }: QRPlaceholderProps) {
   return (
+    
     <Box
       sx={{
         width: size,

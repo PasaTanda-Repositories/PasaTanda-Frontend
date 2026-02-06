@@ -647,6 +647,7 @@ export default function Home() {
               <GlassCard variant="mica" intensity="subtle">
                 <CardContent sx={{ p: { xs: 4, md: 6 }, textAlign: 'center' }}>
                   <Typography variant="h4" sx={{ mb: 2, fontWeight: 700, color: '#000' }}>
+                    {t.faq.title}
                   </Typography>
                   <Typography variant="body1" sx={{ color: 'rgba(0,0,0,0.6)', mb: 3 }}>
                     {locale === 'es' 
@@ -679,7 +680,72 @@ export default function Home() {
               </GlassCard>
             </Fade>
 
-
+            {/* Docs CTA */}
+            <Fade in={mounted} timeout={2000}>
+              <GlassCard variant="mica" intensity="medium" glow>
+                <CardContent sx={{ p: { xs: 4, md: 6 } }}>
+                  <Stack
+                    spacing={3}
+                    direction={{ xs: 'column', md: 'row' }}
+                    alignItems={{ xs: 'flex-start', md: 'center' }}
+                    justifyContent="space-between"
+                  >
+                    <Box>
+                      <Typography variant="h4" sx={{ mb: 1, fontWeight: 700, color: '#000' }}>
+                        {t.docs.title}
+                      </Typography>
+                      <Typography variant="body1" sx={{ color: 'rgba(0,0,0,0.6)', maxWidth: 600 }}>
+                        {t.docs.intro}
+                      </Typography>
+                    </Box>
+                    <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
+                      <Button
+                        component={Link}
+                        href="/docs"
+                        variant="contained"
+                        sx={{
+                          px: 4,
+                          py: 1.5,
+                          bgcolor: '#000',
+                          borderRadius: 3,
+                          fontWeight: 700,
+                          transition: 'all 0.3s ease',
+                          '&:hover': { 
+                            bgcolor: '#222',
+                            transform: 'translateY(-2px)',
+                            boxShadow: '0 10px 30px rgba(0,0,0,0.2)',
+                          },
+                        }}
+                      >
+                        {t.nav.docs}
+                      </Button>
+                      <Button
+                        component={Link}
+                        href="/onboarding/verify"
+                        variant="outlined"
+                        sx={{
+                          px: 4,
+                          py: 1.5,
+                          borderRadius: 3,
+                          borderWidth: 2,
+                          borderColor: '#000',
+                          color: '#000',
+                          fontWeight: 700,
+                          transition: 'all 0.3s ease',
+                          '&:hover': { 
+                            borderWidth: 2,
+                            bgcolor: 'rgba(0,0,0,0.05)',
+                            transform: 'translateY(-2px)',
+                          },
+                        }}
+                      >
+                        {t.nav.onboarding}
+                      </Button>
+                    </Stack>
+                  </Stack>
+                </CardContent>
+              </GlassCard>
+            </Fade>
           </Stack>
         </Container>
 
