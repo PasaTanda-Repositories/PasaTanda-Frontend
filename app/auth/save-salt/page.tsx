@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import {
   Alert,
   Box,
@@ -24,7 +24,7 @@ import ParticleBackground from '../../components/ParticleBackground';
 import { useI18n } from '../../lib/i18n';
 import { useMounted } from '../../lib/useMounted';
 
-export default function SaveSaltPage() {
+function SaveSaltContent() {
   const { t } = useI18n();
   const mounted = useMounted();
   const router = useRouter();
@@ -175,5 +175,13 @@ export default function SaveSaltPage() {
         <Footer />
       </Box>
     </Box>
+  );
+}
+
+export default function SaveSaltPage() {
+  return (
+    <Suspense fallback={null}>
+      <SaveSaltContent />
+    </Suspense>
   );
 }

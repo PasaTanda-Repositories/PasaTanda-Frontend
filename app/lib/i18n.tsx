@@ -38,6 +38,24 @@ es: {
     auth: {
       // He limpiado el inglés que tenías pegado aquí por error
       // y he agrupado la verificación bajo 'verifyPhone' para coincidir con la estructura de 'en'
+      saveSalt: {
+        title: "Guarda tu Salt",
+        subtitle: "Este valor es necesario para recuperar tu cuenta en el futuro. ¡No lo pierdas!",
+        saltLabel: "Tu Salt de Usuario",
+        warning: "¡Importante!",
+        warningDetails: "Guarda este salt en un lugar seguro. Lo necesitarás para acceder a tu cuenta desde otros dispositivos.",
+        continue: "Continuar",
+      },
+      confirmAccount: {
+        title: "Confirma tu Cuenta",
+        subtitle: "Esta es la dirección de Sui generada para ti. Verifica que sea correcta antes de continuar.",
+        addressLabel: "Dirección Sui",
+        fullAddressBelow: "Dirección completa abajo",
+        info: "Esta dirección se deriva de tu salt y será tu identidad en la blockchain.",
+        createButton: "Crear Cuenta",
+        errorDerivingAddress: "Error al derivar la dirección",
+        errorCreating: "Error al crear la cuenta",
+      },
       verifyPhone: {
         title: "Verifica tu Teléfono",
         titleVerified: "¡Teléfono Verificado!",

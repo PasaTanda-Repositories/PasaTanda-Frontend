@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, Suspense } from 'react';
 import {
   Alert,
   Box,
@@ -20,7 +20,7 @@ import { useMounted } from '../../lib/useMounted';
 import { getStoredSession } from '../../lib/zklogin';
 import { fetchGroupDashboard, startGroup } from '../../services/api';
 
-export default function GroupStartPage() {
+function GroupStartContent() {
   const { t } = useI18n();
   const mounted = useMounted();
   const router = useRouter();
@@ -136,5 +136,13 @@ export default function GroupStartPage() {
 
       <Footer />
     </Box>
+  );
+}
+
+export default function GroupStartPage() {
+  return (
+    <Suspense fallback={null}>
+      <GroupStartContent />
+    </Suspense>
   );
 }

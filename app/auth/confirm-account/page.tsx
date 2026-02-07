@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import {
   Alert,
   Box,
@@ -33,7 +33,7 @@ import {
 import { registerOrLoginUser } from '../../services/api';
 import type { ZkLoginSession } from '../../types/zklogin';
 
-export default function ConfirmAccountPage() {
+function ConfirmAccountContent() {
   const { t } = useI18n();
   const mounted = useMounted();
   const router = useRouter();
@@ -282,5 +282,19 @@ export default function ConfirmAccountPage() {
         <Footer />
       </Box>
     </Box>
+  );
+}
+
+export default function ConfirmAccountPage() {
+  return (
+    <Suspense
+      fallback={
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+          <CircularProgress />
+        </Box>
+      }
+    >
+      <ConfirmAccountContent />
+    </Suspense>
   );
 }

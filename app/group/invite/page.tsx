@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, Suspense } from 'react';
 import {
   Alert,
   Box,
@@ -24,7 +24,7 @@ import { useMounted } from '../../lib/useMounted';
 import { getStoredSession } from '../../lib/zklogin';
 import { generateGroupInvitation } from '../../services/api';
 
-export default function GroupInvitePage() {
+function GroupInviteContent() {
   const { t } = useI18n();
   const mounted = useMounted();
   const router = useRouter();
@@ -194,5 +194,13 @@ export default function GroupInvitePage() {
 
       <Footer />
     </Box>
+  );
+}
+
+export default function GroupInvitePage() {
+  return (
+    <Suspense fallback={null}>
+      <GroupInviteContent />
+    </Suspense>
   );
 }

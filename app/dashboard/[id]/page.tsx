@@ -34,7 +34,8 @@ export default function DashboardDetailPage() {
   const session = useMemo(() => getStoredSession(), []);
   const params = useParams();
 
-  const groupId = params?.id;
+  const groupIdRaw = params?.id;
+  const groupId = Array.isArray(groupIdRaw) ? groupIdRaw[0] : groupIdRaw;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -181,7 +182,7 @@ export default function DashboardDetailPage() {
                   </Typography>
                   <Grid container spacing={2}>
                     {participants.map((p) => (
-                      <Grid item xs={12} sm={6} md={4} key={p.membershipId}>
+                      <Grid size={{ xs: 12, sm: 6, md: 4 }} key={p.membershipId}>
                         <GlassCard variant="default" intensity="low">
                           <CardContent>
                             <Typography variant="body1" sx={{ fontWeight: 700 }}>
@@ -198,7 +199,7 @@ export default function DashboardDetailPage() {
                       </Grid>
                     ))}
                     {participants.length === 0 && (
-                      <Grid item xs={12}>
+                      <Grid size={{ xs: 12 }}>
                         <Typography variant="body2" color="text.secondary">
                           {t.dashboard.participantsEmpty}
                         </Typography>
