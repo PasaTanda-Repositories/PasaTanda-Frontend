@@ -27,6 +27,30 @@ import { useI18n } from '../../lib/i18n';
 import { useMounted } from '../../lib/useMounted';
 import { getStoredSession, persistSession } from '../../lib/zklogin';
 import { requestPhoneOtp, checkPhoneStatus } from '../../services/api';
+import { MuiTelInput } from 'mui-tel-input';
+
+const phoneInputStyle = {
+  width: '100%',
+  '& .MuiOutlinedInput-root': {
+    bgcolor: 'rgba(255,255,255,0.95)',
+    borderRadius: 2,
+    '& fieldset': {
+      borderColor: 'rgba(0,0,0,0.2)',
+    },
+    '&:hover fieldset': {
+      borderColor: 'rgba(0,0,0,0.4)',
+    },
+    '&.Mui-focused fieldset': {
+      borderColor: '#000',
+    },
+  },
+  '& .MuiInputLabel-root': {
+    color: 'rgba(0,0,0,0.6)',
+  },
+  '& .MuiInputBase-input': {
+    color: '#000',
+  },
+};
 
 export default function VerifyPhonePage() {
   const { t } = useI18n();
@@ -38,6 +62,7 @@ export default function VerifyPhonePage() {
   const [checking, setChecking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [verified, setVerified] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState('');
 
   const session = getStoredSession();
 
@@ -56,11 +81,17 @@ export default function VerifyPhonePage() {
   const handleGenerateOTP = async () => {
     if (!session?.accessToken) return;
 
+    const normalizedPhone = phoneNumber.trim();
+    if (!normalizedPhone) {
+      setError(t.auth.verifyPhone.phoneRequired);
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      const data = await requestPhoneOtp(session.accessToken);
+      const data = await requestPhoneOtp(session.accessToken, normalizedPhone);
       // The backend may return `code` (API docs) or `otp` (legacy)
       setOtpCode(data.code || data.otp || null);
       setError(null);
@@ -75,11 +106,17 @@ export default function VerifyPhonePage() {
   const handleCheckStatus = async () => {
     if (!session?.accessToken) return;
 
+    const normalizedPhone = phoneNumber.trim();
+    if (!normalizedPhone) {
+      setError(t.auth.verifyPhone.phoneRequired);
+      return;
+    }
+
     setChecking(true);
     setError(null);
 
     try {
-      const data = await checkPhoneStatus(session.accessToken);
+      const data = await checkPhoneStatus(session.accessToken, normalizedPhone);
 
       if (data.verified) {
         setVerified(true);
@@ -164,13 +201,26 @@ export default function VerifyPhonePage() {
                     {verified ? t.auth.verifyPhone.subtitleVerified : t.auth.verifyPhone.subtitle}
                   </Typography>
 
+                  {!verified && (
+                    <MuiTelInput
+                      label={t.auth.verifyPhone.phoneLabel}
+                      value={phoneNumber}
+                      onChange={(value) => setPhoneNumber(value)}
+                      defaultCountry="BO"
+                      preferredCountries={['BO', 'AR', 'BR', 'CL', 'PE']}
+                      fullWidth
+                      placeholder={t.auth.verifyPhone.phonePlaceholder}
+                      sx={phoneInputStyle}
+                    />
+                  )}
+
                   {!verified && !otpCode && (
                     <Button
                       fullWidth
                       variant="contained"
                       size="large"
                       onClick={handleGenerateOTP}
-                      disabled={loading}
+                      disabled={loading || !phoneNumber.trim()}
                       sx={{ mt: 3, bgcolor: '#000', '&:hover': { bgcolor: '#111' } }}
                     >
                       {loading ? (
