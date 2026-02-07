@@ -228,47 +228,51 @@ export default function DashboardPage() {
                   </Stack>
 
                   <Grid container spacing={3}>
-                    {groups.map((group) => (
-                      <Grid size={{ xs: 12, md: 6, lg: 4 }} key={group.id}>
-                        <Card
-                          sx={{
-                            cursor: 'pointer',
-                            transition: 'transform 0.2s',
-                            '&:hover': { transform: 'translateY(-4px)' },
-                          }}
-                          onClick={() => router.push(`/dashboard/${group.id}`)}
-                        >
-                          <CardContent>
-                            <Stack spacing={2}>
-                              <Stack direction="row" justifyContent="space-between" alignItems="center">
-                                <Typography variant="h6" sx={{ fontWeight: 700 }}>
-                                  {group.name}
-                                </Typography>
-                                <Chip
-                                  label={group.status}
-                                  size="small"
-                                  color={
-                                    group.status === 'ACTIVE'
-                                      ? 'success'
-                                      : group.status === 'PENDING'
-                                        ? 'warning'
-                                        : 'default'
-                                  }
-                                />
+                    {groups.map((group) => {
+                      const targetId = group.id ?? group.objectId ?? (group as { groupId?: string }).groupId;
+                      if (!targetId) return null;
+                      return (
+                        <Grid size={{ xs: 12, md: 6, lg: 4 }} key={targetId}>
+                          <Card
+                            sx={{
+                              cursor: 'pointer',
+                              transition: 'transform 0.2s',
+                              '&:hover': { transform: 'translateY(-4px)' },
+                            }}
+                            onClick={() => router.push(`/dashboard/${targetId}`)}
+                          >
+                            <CardContent>
+                              <Stack spacing={2}>
+                                <Stack direction="row" justifyContent="space-between" alignItems="center">
+                                  <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                                    {group.name}
+                                  </Typography>
+                                  <Chip
+                                    label={group.status}
+                                    size="small"
+                                    color={
+                                      group.status === 'ACTIVE'
+                                        ? 'success'
+                                        : group.status === 'PENDING'
+                                          ? 'warning'
+                                          : 'default'
+                                    }
+                                  />
+                                </Stack>
+                                <Box>
+                                  <Typography variant="body2" color="text.secondary">
+                                    {t.dashboard.members}: {group.totalMembers ?? '—'}
+                                  </Typography>
+                                  <Typography variant="body2" color="text.secondary">
+                                    {t.dashboard.currentRound}: {group.currentRound ?? '—'}
+                                  </Typography>
+                                </Box>
                               </Stack>
-                              <Box>
-                                <Typography variant="body2" color="text.secondary">
-                                  {t.dashboard.members}: {group.totalMembers ?? '—'}
-                                </Typography>
-                                <Typography variant="body2" color="text.secondary">
-                                  {t.dashboard.currentRound}: {group.currentRound ?? '—'}
-                                </Typography>
-                              </Box>
-                            </Stack>
-                          </CardContent>
-                        </Card>
-                      </Grid>
-                    ))}
+                            </CardContent>
+                          </Card>
+                        </Grid>
+                      );
+                    })}
                   </Grid>
                 </Box>
               )}

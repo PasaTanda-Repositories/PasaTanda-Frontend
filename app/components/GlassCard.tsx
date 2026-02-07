@@ -16,13 +16,14 @@ import { ReactNode } from 'react';
  */
 
 export type GlassVariant = 'default' | 'mica' | 'acrylic' | 'frosted';
+export type GlassIntensity = 'low' | 'subtle' | 'medium' | 'strong';
 
 // Base props without conflict with CardProps variant
 export interface GlassCardBaseProps {
   children: ReactNode;
   dark?: boolean;
   variant?: GlassVariant;
-  intensity?: 'subtle' | 'medium' | 'strong';
+  intensity?: GlassIntensity;
   glow?: boolean;
   animated?: boolean;
   sx?: SxProps<Theme>;
@@ -35,8 +36,9 @@ export type GlassCardProps = GlassCardBaseProps & Omit<CardProps, 'variant'> & {
 };
 
 // Mica Material effect - Windows 11 style with tinted glass
-const getMicaStyles = (dark: boolean, intensity: 'subtle' | 'medium' | 'strong') => {
-  const opacityMap = {
+const getMicaStyles = (dark: boolean, intensity: GlassIntensity) => {
+  const opacityMap: Record<GlassIntensity, { bg: number; border: number }> = {
+    low: { bg: dark ? 0.55 : 0.7, border: 0.06 },
     subtle: { bg: dark ? 0.6 : 0.75, border: 0.08 },
     medium: { bg: dark ? 0.7 : 0.85, border: 0.12 },
     strong: { bg: dark ? 0.8 : 0.92, border: 0.15 },
@@ -71,8 +73,9 @@ const getMicaStyles = (dark: boolean, intensity: 'subtle' | 'medium' | 'strong')
 };
 
 // Acrylic effect - Fluent Design with noise texture feel
-const getAcrylicStyles = (dark: boolean, intensity: 'subtle' | 'medium' | 'strong') => {
-  const opacityMap = {
+const getAcrylicStyles = (dark: boolean, intensity: GlassIntensity) => {
+  const opacityMap: Record<GlassIntensity, { bg: number; blur: number }> = {
+    low: { bg: dark ? 0.45 : 0.6, blur: 25 },
     subtle: { bg: dark ? 0.5 : 0.65, blur: 30 },
     medium: { bg: dark ? 0.6 : 0.75, blur: 40 },
     strong: { bg: dark ? 0.75 : 0.85, blur: 50 },
@@ -99,8 +102,9 @@ const getAcrylicStyles = (dark: boolean, intensity: 'subtle' | 'medium' | 'stron
 };
 
 // Frosted Glass effect - macOS Liquid Glass style
-const getFrostedStyles = (dark: boolean, intensity: 'subtle' | 'medium' | 'strong') => {
-  const opacityMap = {
+const getFrostedStyles = (dark: boolean, intensity: GlassIntensity) => {
+  const opacityMap: Record<GlassIntensity, { bg: number }> = {
+    low: { bg: dark ? 0.35 : 0.5 },
     subtle: { bg: dark ? 0.4 : 0.55 },
     medium: { bg: dark ? 0.55 : 0.7 },
     strong: { bg: dark ? 0.7 : 0.85 },
@@ -131,8 +135,9 @@ const getFrostedStyles = (dark: boolean, intensity: 'subtle' | 'medium' | 'stron
 };
 
 // Default glass - balanced effect
-const getDefaultStyles = (dark: boolean, intensity: 'subtle' | 'medium' | 'strong') => {
-  const opacityMap = {
+const getDefaultStyles = (dark: boolean, intensity: GlassIntensity) => {
+  const opacityMap: Record<GlassIntensity, { bg: number }> = {
+    low: { bg: dark ? 0.65 : 0.75 },
     subtle: { bg: dark ? 0.7 : 0.8 },
     medium: { bg: dark ? 0.8 : 0.88 },
     strong: { bg: dark ? 0.88 : 0.94 },
@@ -157,7 +162,7 @@ const getDefaultStyles = (dark: boolean, intensity: 'subtle' | 'medium' | 'stron
 const getVariantStyles = (
   variant: GlassVariant, 
   dark: boolean, 
-  intensity: 'subtle' | 'medium' | 'strong'
+  intensity: GlassIntensity
 ) => {
   switch (variant) {
     case 'mica':

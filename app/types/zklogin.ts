@@ -100,6 +100,8 @@ export interface AgentBEGroup {
   myTurn?: number;
   totalMembers?: number;
   currentRound?: number;
+  objectId?: string;
+  groupId?: string;
 }
 
 export type FrequencyType = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'CUSTOM' | string;

@@ -11,7 +11,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import Header from '../../components/Header';
 import Footer from '../../components/Footer';
 import { GlassCard } from '../../components/GlassCard';
@@ -21,23 +21,26 @@ import { getStoredSession } from '../../lib/zklogin';
 import { fetchAdminGroupDashboard } from '../../services/api';
 import type { AgentBEGroupDashboard } from '../../types/zklogin';
 
-interface DashboardDetailPageProps {
-  params: { id: string };
-}
-
-export default function DashboardDetailPage({ params }: DashboardDetailPageProps) {
+export default function DashboardDetailPage() {
   const { t } = useI18n();
   const mounted = useMounted();
   const router = useRouter();
   const session = useMemo(() => getStoredSession(), []);
+  const params = useParams();
 
-  const groupId = params.id;
+  const groupId = params?.id;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<AgentBEGroupDashboard | null>(null);
 
   useEffect(() => {
+    if (!groupId || groupId === 'undefined') {
+      setError(t.dashboard.errorLoading);
+      setLoading(false);
+      return;
+    }
+
     if (!session || !session.accessToken) {
       router.push('/auth/login');
       return;
