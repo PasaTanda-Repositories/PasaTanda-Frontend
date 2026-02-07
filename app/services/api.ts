@@ -20,6 +20,11 @@ import type {
   AgentBEGroup,
   OAuthTokenRequest,
   OAuthTokenResponse,
+  AgentBECreateGroupResponse,
+  AgentBEInvitationResponse,
+  AgentBEJoinResponse,
+  AgentBEGroupDashboard,
+  AgentBEStartGroupResponse,
 } from '../types/zklogin';
 
 const TAG = 'ApiService';
@@ -231,6 +236,139 @@ export async function fetchMyGroups(
   );
 
   return Array.isArray(raw) ? raw : (raw?.groups ?? []);
+}
+
+/**
+ * `POST /v1/groups`
+ * Create a new group (tanda).
+ */
+export async function createGroup(
+  accessToken: string,
+  payload: {
+    name: string;
+    currency: string;
+    amount: number;
+    frequency: number | string;
+    enableYield?: boolean;
+  },
+): Promise<AgentBECreateGroupResponse> {
+  const base = agentBaseUrl();
+  if (!base) throw new Error('NEXT_PUBLIC_AGENT_BE_URL is not configured');
+
+  return request<AgentBECreateGroupResponse>(
+    'createGroup',
+    `${base}/v1/groups`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(payload),
+    },
+    { name: payload.name, currency: payload.currency, amount: payload.amount },
+  );
+}
+
+/**
+ * `POST /v1/groups/{id}/invitation`
+ * Generate an invitation link for a group.
+ */
+export async function generateGroupInvitation(
+  accessToken: string,
+  groupId: string,
+): Promise<AgentBEInvitationResponse> {
+  const base = agentBaseUrl();
+  if (!base) throw new Error('NEXT_PUBLIC_AGENT_BE_URL is not configured');
+
+  return request<AgentBEInvitationResponse>(
+    'generateGroupInvitation',
+    `${base}/v1/groups/${groupId}/invitation`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+    { groupId },
+  );
+}
+
+/**
+ * `POST /v1/groups/{id}/join`
+ * Join a group with an optional turn number.
+ */
+export async function joinGroup(
+  accessToken: string,
+  groupId: string,
+  turnNumber?: number,
+): Promise<AgentBEJoinResponse> {
+  const base = agentBaseUrl();
+  if (!base) throw new Error('NEXT_PUBLIC_AGENT_BE_URL is not configured');
+
+  const body = turnNumber ? { turnNumber } : undefined;
+
+  return request<AgentBEJoinResponse>(
+    'joinGroup',
+    `${base}/v1/groups/${groupId}/join`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        ...(body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    },
+    { groupId, hasTurnNumber: Boolean(turnNumber) },
+  );
+}
+
+/**
+ * `GET /v1/groups/{id}/dashboard`
+ * Retrieve group dashboard details.
+ */
+export async function fetchGroupDashboard(
+  accessToken: string,
+  groupId: string,
+): Promise<AgentBEGroupDashboard> {
+  const base = agentBaseUrl();
+  if (!base) throw new Error('NEXT_PUBLIC_AGENT_BE_URL is not configured');
+
+  return request<AgentBEGroupDashboard>(
+    'fetchGroupDashboard',
+    `${base}/v1/groups/${groupId}/dashboard`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+    { groupId },
+  );
+}
+
+/**
+ * `POST /v1/groups/{id}/start`
+ * Start a group (activate the tanda contract).
+ */
+export async function startGroup(
+  accessToken: string,
+  groupId: string,
+): Promise<AgentBEStartGroupResponse> {
+  const base = agentBaseUrl();
+  if (!base) throw new Error('NEXT_PUBLIC_AGENT_BE_URL is not configured');
+
+  return request<AgentBEStartGroupResponse>(
+    'startGroup',
+    `${base}/v1/groups/${groupId}/start`,
+    {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+    { groupId },
+  );
 }
 
 // ---------------------------------------------------------------------------

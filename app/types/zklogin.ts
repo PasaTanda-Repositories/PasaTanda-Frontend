@@ -102,6 +102,40 @@ export interface AgentBEGroup {
   currentRound?: number;
 }
 
+/** Response from `POST /v1/groups`. */
+export interface AgentBECreateGroupResponse {
+  id?: string;
+  groupId?: string;
+  objectId?: string;
+  name?: string;
+  status?: string;
+}
+
+/** Response from `POST /v1/groups/{id}/invitation`. */
+export interface AgentBEInvitationResponse {
+  inviteCode: string;
+  inviteLink: string;
+  groupName: string;
+}
+
+/** Response from `POST /v1/groups/{id}/join`. */
+export interface AgentBEJoinResponse {
+  membershipId: string;
+  turnIndex: number;
+}
+
+/** Response from `GET /v1/groups/{id}/dashboard`. */
+export interface AgentBEGroupDashboard {
+  group: { objectId: string; status: string };
+  participants: Array<{ alias?: string; status?: string }>;
+  myStatus?: string;
+}
+
+/** Response from `POST /v1/groups/{id}/start`. */
+export interface AgentBEStartGroupResponse {
+  status?: string;
+}
+
 // ---------------------------------------------------------------------------
 // OAuth token exchange (Next.js API route)
 // ---------------------------------------------------------------------------
