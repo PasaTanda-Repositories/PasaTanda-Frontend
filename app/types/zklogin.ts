@@ -102,6 +102,19 @@ export interface AgentBEGroup {
   currentRound?: number;
 }
 
+export type FrequencyType = 'WEEKLY' | 'BIWEEKLY' | 'MONTHLY' | 'CUSTOM' | string;
+
+export interface GroupInviteLookup {
+  id: string;
+  name: string;
+  status: string;
+  contributionAmount: number;
+  guaranteeAmount: number;
+  frequency: FrequencyType;
+  totalRounds: number;
+  inviteCode: string;
+}
+
 /** Response from `POST /v1/groups`. */
 export interface AgentBECreateGroupResponse {
   id?: string;
@@ -118,15 +131,25 @@ export interface AgentBEInvitationResponse {
   groupName: string;
 }
 
-/** Response from `POST /v1/groups/{id}/join`. */
+/** Response from `POST /v1/groups/join`. */
 export interface AgentBEJoinResponse {
   membershipId: string;
   turnIndex: number;
+  groupId?: string;
 }
 
 /** Response from `GET /v1/groups/{id}/dashboard`. */
 export interface AgentBEGroupDashboard {
-  group: { objectId: string; status: string };
+  group: {
+    objectId: string;
+    status: string;
+    name?: string;
+    contributionAmount?: number;
+    guaranteeAmount?: number;
+    frequency?: FrequencyType;
+    totalRounds?: number;
+    totalMembers?: number;
+  };
   participants: Array<{ alias?: string; status?: string }>;
   myStatus?: string;
 }

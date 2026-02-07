@@ -30,6 +30,13 @@ const frequencyOptions = [
   { value: -1, labelKey: 'custom' },
 ];
 
+const frequencyEnums: Record<number, string> = {
+  7: 'WEEKLY',
+  14: 'BIWEEKLY',
+  30: 'MONTHLY',
+  [-1]: 'CUSTOM',
+};
+
 const glassInputStyle = {
   '& .MuiOutlinedInput-root': {
     bgcolor: 'rgba(255,255,255,0.95)',
@@ -63,10 +70,12 @@ export default function GroupCreatePage() {
 
   const [name, setName] = useState('');
   const [currency, setCurrency] = useState<'BS' | 'USDC'>('BS');
-  const [amount, setAmount] = useState('');
+  const [contribution, setContribution] = useState('');
   const [frequency, setFrequency] = useState<number>(30);
   const [customDays, setCustomDays] = useState('');
   const [yieldEnabled, setYieldEnabled] = useState(false);
+  const [guarantee, setGuarantee] = useState('0');
+  const [totalRounds, setTotalRounds] = useState('1');
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -105,18 +114,29 @@ export default function GroupCreatePage() {
       return;
     }
 
-    const parsedAmount = Number(amount);
+    const parsedContribution = Number(contribution);
+    const parsedGuarantee = Number(guarantee || '0');
+    const parsedRounds = Number(totalRounds);
     const freqToSend = resolveFrequency();
+    const frequencyEnum = frequencyEnums[frequency];
 
     if (!name.trim()) {
       setMessage({ type: 'error', text: t.groups.create.nameRequired });
       return;
     }
-    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-      setMessage({ type: 'error', text: t.groups.create.amountRequired });
+    if (!Number.isFinite(parsedContribution) || parsedContribution < 1) {
+      setMessage({ type: 'error', text: t.groups.create.contributionRequired });
       return;
     }
-    if (freqToSend <= 0) {
+    if (!Number.isFinite(parsedGuarantee) || parsedGuarantee < 0) {
+      setMessage({ type: 'error', text: t.groups.create.guaranteeInvalid });
+      return;
+    }
+    if (!Number.isFinite(parsedRounds) || parsedRounds < 1) {
+      setMessage({ type: 'error', text: t.groups.create.roundsRequired });
+      return;
+    }
+    if (freqToSend <= 0 || !frequencyEnum) {
       setMessage({ type: 'error', text: t.groups.create.frequencyRequired });
       return;
     }
@@ -128,8 +148,11 @@ export default function GroupCreatePage() {
       const response = await createGroup(session.accessToken, {
         name: name.trim(),
         currency,
-        amount: parsedAmount,
-        frequency: freqToSend,
+        contributionAmount: parsedContribution,
+        guaranteeAmount: parsedGuarantee,
+        totalRounds: parsedRounds,
+        frequency: frequencyEnum,
+        frequencyDays: freqToSend,
         enableYield: yieldEnabled,
       });
 
@@ -211,10 +234,29 @@ export default function GroupCreatePage() {
               </Stack>
 
               <TextField
-                label={`${t.groups.create.amountLabel} (${currency})`}
+                label={`${t.groups.create.contributionLabel} (${currency})`}
                 type="number"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                value={contribution}
+                onChange={(e) => setContribution(e.target.value)}
+                fullWidth
+                sx={glassInputStyle}
+              />
+
+              <TextField
+                label={`${t.groups.create.guaranteeLabel} (${currency})`}
+                type="number"
+                value={guarantee}
+                onChange={(e) => setGuarantee(e.target.value)}
+                helperText={t.groups.create.guaranteeHelper}
+                fullWidth
+                sx={glassInputStyle}
+              />
+
+              <TextField
+                label={t.groups.create.totalRoundsLabel}
+                type="number"
+                value={totalRounds}
+                onChange={(e) => setTotalRounds(e.target.value)}
                 fullWidth
                 sx={glassInputStyle}
               />

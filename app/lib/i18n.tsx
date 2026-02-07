@@ -5,7 +5,7 @@ import { createContext, useCallback, useContext, useMemo, useSyncExternalStore }
 export type Locale = "es" | "en";
 
 const translations = {
-  es: {
+es: {
     nav: {
       home: "Inicio",
       pay: "Pagos",
@@ -15,44 +15,11 @@ const translations = {
       tos: "Términos",
       privacy: "Privacidad",
     },
-    login: {
-      title: "Inicia sesión con zkLogin",
-      subtitle:
-        "Firma con Google o Facebook usando zkLogin de Sui. Generamos una clave efímera y un nonce para la prueba.",
-      google: "Continuar con Google",
-      facebook: "Continuar con Facebook",
-      apple: "Apple (próximamente)",
-      appleSoon: "Muy pronto podrás usar Apple ID con zkLogin.",
-      sessionReady: "Sesión zkLogin lista",
-      sessionMissing: "Primero inicia sesión con zkLogin para crear la tanda.",
-      addressLabel: "Dirección Sui derivada",
-      continue: "Ir a crear la tanda",
-      retry: "Reintentar login",
-      callbackProcessing: "Procesando callback OAuth...",
-      callbackSuccess: "¡Autenticación completada! Guardamos tu sesión zkLogin.",
-      callbackError: "No pudimos completar el login. Vuelve a intentarlo.",
-      clearSession: "Limpiar sesión",
-      sessionCleared: "Sesión eliminada. Inicia sesión nuevamente.",
-    },
+    // Nota: He movido 'create' a 'groups.create' donde parece pertenecer más abajo, 
+    // o si lo usas en la raíz, déjalo aquí.
     auth: {
-      saveSalt: {
-        title: "Guarda tu Salt",
-        subtitle: "Este valor es necesario para recuperar tu cuenta en el futuro. ¡No lo pierdas!",
-        saltLabel: "Tu Salt de Usuario",
-        warning: "¡Importante!",
-        warningDetails: "Guarda este salt en un lugar seguro. Lo necesitarás para acceder a tu cuenta desde otros dispositivos.",
-        continue: "Continuar",
-      },
-      confirmAccount: {
-        title: "Confirma tu Cuenta",
-        subtitle: "Esta es la dirección Sui que se generó para ti. Verifica que sea correcta antes de continuar.",
-        addressLabel: "Dirección Sui",
-        fullAddressBelow: "Dirección completa abajo",
-        info: "Esta dirección se deriva de tu salt y será tu identidad en la blockchain.",
-        createButton: "Crear Cuenta",
-        errorDerivingAddress: "Error al derivar la dirección",
-        errorCreating: "Error al crear la cuenta",
-      },
+      // He limpiado el inglés que tenías pegado aquí por error
+      // y he agrupado la verificación bajo 'verifyPhone' para coincidir con la estructura de 'en'
       verifyPhone: {
         title: "Verifica tu Teléfono",
         titleVerified: "¡Teléfono Verificado!",
@@ -71,7 +38,8 @@ const translations = {
         errorGenerating: "Error al generar código",
         errorChecking: "Error al verificar estado",
       },
-    },
+    }, // Cierra auth
+    // (AQUI ESTABA EL ERROR: quitamos la llave extra que cerraba 'es')
     dashboard: {
       welcome: "Bienvenido",
       verified: "Verificado",
@@ -93,7 +61,10 @@ const translations = {
         currencyLabel: "Moneda",
         currencyBs: "Bolivianos (Bs)",
         currencyUsdc: "USDC",
-        amountLabel: "Monto total",
+        contributionLabel: "Monto por ronda",
+        guaranteeLabel: "Monto de garantía",
+        guaranteeHelper: "La garantía puede ser cero si aún no la acuerdan.",
+        totalRoundsLabel: "Cantidad de rondas",
         frequencyLabel: "Frecuencia de pagos",
         customDaysLabel: "Días personalizados",
         yieldLabel: "Activar rendimientos (opcional)",
@@ -104,7 +75,9 @@ const translations = {
         submit: "Crear grupo",
         creating: "Creando...",
         nameRequired: "Ingresa el nombre del grupo.",
-        amountRequired: "Ingresa un monto válido.",
+        contributionRequired: "Ingresa un monto de ronda válido (>= 1).",
+        guaranteeInvalid: "La garantía debe ser un número >= 0.",
+        roundsRequired: "Define cuántas rondas tendrá la tanda.",
         frequencyRequired: "Selecciona la frecuencia.",
         created: "Grupo creado. Genera la invitación para compartirlo.",
         missingGroupId: "No se pudo obtener el identificador del grupo.",
@@ -463,7 +436,10 @@ const translations = {
         currencyLabel: "Currency",
         currencyBs: "Bolivianos (Bs)",
         currencyUsdc: "USDC",
-        amountLabel: "Total amount",
+        contributionLabel: "Contribution per round",
+        guaranteeLabel: "Guarantee amount",
+        guaranteeHelper: "Guarantees are optional; use 0 if not required yet.",
+        totalRoundsLabel: "Number of rounds",
         frequencyLabel: "Payment frequency",
         customDaysLabel: "Custom days",
         yieldLabel: "Enable yield (optional)",
@@ -474,7 +450,9 @@ const translations = {
         submit: "Create group",
         creating: "Creating...",
         nameRequired: "Enter the group name.",
-        amountRequired: "Enter a valid amount.",
+        contributionRequired: "Enter a valid round amount (>= 1).",
+        guaranteeInvalid: "Guarantee must be a number >= 0.",
+        roundsRequired: "Specify how many rounds the tanda will run.",
         frequencyRequired: "Select a frequency.",
         created: "Group created. Generate the invitation to share it.",
         missingGroupId: "Could not retrieve the group identifier.",

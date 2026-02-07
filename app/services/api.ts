@@ -25,6 +25,7 @@ import type {
   AgentBEJoinResponse,
   AgentBEGroupDashboard,
   AgentBEStartGroupResponse,
+  GroupInviteLookup,
 } from '../types/zklogin';
 
 const TAG = 'ApiService';
@@ -247,8 +248,11 @@ export async function createGroup(
   payload: {
     name: string;
     currency: string;
-    amount: number;
-    frequency: number | string;
+    contributionAmount: number;
+    guaranteeAmount: number;
+    totalRounds: number;
+    frequency: string;
+    frequencyDays: number;
     enableYield?: boolean;
   },
 ): Promise<AgentBECreateGroupResponse> {
@@ -266,7 +270,13 @@ export async function createGroup(
       },
       body: JSON.stringify(payload),
     },
-    { name: payload.name, currency: payload.currency, amount: payload.amount },
+    { 
+      name: payload.name, 
+      currency: payload.currency, 
+      round: payload.contributionAmount,
+      totalRounds: payload.totalRounds,
+      frequency: payload.frequency,
+    },
   );
 }
 
@@ -295,31 +305,56 @@ export async function generateGroupInvitation(
 }
 
 /**
- * `POST /v1/groups/{id}/join`
+ * `GET /v1/groups/join/{inviteCode}`
+ * Lookup group details by invitation code.
+ */
+export async function lookupGroupByInvite(
+  accessToken: string,
+  inviteCode: string,
+): Promise<GroupInviteLookup> {
+  const base = agentBaseUrl();
+  if (!base) throw new Error('NEXT_PUBLIC_AGENT_BE_URL is not configured');
+
+  return request<GroupInviteLookup>(
+    'lookupGroupByInvite',
+    `${base}/v1/groups/join/${inviteCode}`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+    { inviteCode },
+  );
+}
+
+/**
+ * `POST /v1/groups/join`
  * Join a group with an optional turn number.
  */
 export async function joinGroup(
   accessToken: string,
-  groupId: string,
+  inviteCode: string,
   turnNumber?: number,
 ): Promise<AgentBEJoinResponse> {
   const base = agentBaseUrl();
   if (!base) throw new Error('NEXT_PUBLIC_AGENT_BE_URL is not configured');
 
-  const body = turnNumber ? { turnNumber } : undefined;
+  const body: Record<string, unknown> = { inviteCode };
+  if (typeof turnNumber === 'number') body.turnNumber = turnNumber;
 
   return request<AgentBEJoinResponse>(
     'joinGroup',
-    `${base}/v1/groups/${groupId}/join`,
+    `${base}/v1/groups/join`,
     {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
+        'Content-Type': 'application/json',
       },
-      body: body ? JSON.stringify(body) : undefined,
+      body: JSON.stringify(body),
     },
-    { groupId, hasTurnNumber: Boolean(turnNumber) },
+    { inviteCode, hasTurnNumber: Boolean(turnNumber) },
   );
 }
 
@@ -337,6 +372,30 @@ export async function fetchGroupDashboard(
   return request<AgentBEGroupDashboard>(
     'fetchGroupDashboard',
     `${base}/v1/groups/${groupId}/dashboard`,
+    {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+    { groupId },
+  );
+}
+
+/**
+ * `GET /v1/groups/dashboard/{id}`
+ * Retrieve admin dashboard details for a group (requires admin).
+ */
+export async function fetchAdminGroupDashboard(
+  accessToken: string,
+  groupId: string,
+): Promise<AgentBEGroupDashboard> {
+  const base = agentBaseUrl();
+  if (!base) throw new Error('NEXT_PUBLIC_AGENT_BE_URL is not configured');
+
+  return request<AgentBEGroupDashboard>(
+    'fetchAdminGroupDashboard',
+    `${base}/v1/groups/dashboard/${groupId}`,
     {
       method: 'GET',
       headers: {

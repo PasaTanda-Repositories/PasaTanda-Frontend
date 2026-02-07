@@ -31,6 +31,13 @@ export default function GroupInvitePage() {
   const searchParams = useSearchParams();
   const session = useMemo(() => getStoredSession(), []);
 
+  const frontendBase = useMemo(() => {
+    const envBase = process.env.NEXT_PUBLIC_FRONTEND_URL;
+    if (envBase) return envBase.replace(/\/$/, '');
+    if (typeof window !== 'undefined') return window.location.origin.replace(/\/$/, '');
+    return '';
+  }, []);
+
   const groupId = searchParams.get('groupId');
   const groupName = searchParams.get('name');
 
@@ -58,7 +65,10 @@ export default function GroupInvitePage() {
     try {
       const data = await generateGroupInvitation(session.accessToken, groupId);
       setCode(data.inviteCode);
-      setLinkValue(data.inviteLink);
+      const constructedLink = frontendBase
+        ? `${frontendBase}/group/join/${data.inviteCode}`
+        : data.inviteLink;
+      setLinkValue(constructedLink);
     } catch (err) {
       const message = err instanceof Error ? err.message : t.groups.invite.errorLoading;
       setError(message);
