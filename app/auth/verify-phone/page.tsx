@@ -26,6 +26,7 @@ import ParticleBackground from '../../components/ParticleBackground';
 import { useI18n } from '../../lib/i18n';
 import { useMounted } from '../../lib/useMounted';
 import { getStoredSession, persistSession } from '../../lib/zklogin';
+import { requestPhoneOtp, checkPhoneStatus } from '../../services/api';
 
 export default function VerifyPhonePage() {
   const { t } = useI18n();
@@ -59,22 +60,9 @@ export default function VerifyPhonePage() {
     setError(null);
 
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_AGENT_BE_URL || '';
-      const res = await fetch(`${baseUrl}/v1/auth/phone/otp`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.accessToken}`,
-        },
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data?.message || 'Failed to generate OTP');
-      }
-
-      setOtpCode(data.otp);
+      const data = await requestPhoneOtp(session.accessToken);
+      // The backend may return `code` (API docs) or `otp` (legacy)
+      setOtpCode(data.code || data.otp || null);
       setError(null);
     } catch (err) {
       const message = err instanceof Error ? err.message : t.auth.verifyPhone.errorGenerating;
@@ -91,30 +79,18 @@ export default function VerifyPhonePage() {
     setError(null);
 
     try {
-      const baseUrl = process.env.NEXT_PUBLIC_AGENT_BE_URL || '';
-      const res = await fetch(`${baseUrl}/v1/auth/phone/status`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${session.accessToken}`,
-        },
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data?.message || 'Failed to check status');
-      }
+      const data = await checkPhoneStatus(session.accessToken);
 
       if (data.verified) {
         setVerified(true);
-        
-        // Update session
+
+        // Update persisted session
         persistSession({
           ...session,
           phoneVerified: true,
         });
 
-        // Redirect to dashboard after delay
+        // Redirect to dashboard after a short delay
         setTimeout(() => {
           router.push('/dashboard');
         }, 1500);
@@ -179,11 +155,11 @@ export default function VerifyPhonePage() {
               <CardContent sx={{ p: { xs: 4, md: 6 } }}>
                 <Stack spacing={3} alignItems="center">
                   <PhoneAndroidIcon sx={{ fontSize: 64, color: '#000' }} />
-                  
+
                   <Typography variant="h4" sx={{ fontWeight: 800, textAlign: 'center' }}>
                     {verified ? t.auth.verifyPhone.titleVerified : t.auth.verifyPhone.title}
                   </Typography>
-                  
+
                   <Typography variant="body1" color="text.secondary" textAlign="center">
                     {verified ? t.auth.verifyPhone.subtitleVerified : t.auth.verifyPhone.subtitle}
                   </Typography>
@@ -195,13 +171,13 @@ export default function VerifyPhonePage() {
                       size="large"
                       onClick={handleGenerateOTP}
                       disabled={loading}
-                      sx={{
-                        mt: 3,
-                        bgcolor: '#000',
-                        '&:hover': { bgcolor: '#111' },
-                      }}
+                      sx={{ mt: 3, bgcolor: '#000', '&:hover': { bgcolor: '#111' } }}
                     >
-                      {loading ? <CircularProgress size={24} color="inherit" /> : t.auth.verifyPhone.generateButton}
+                      {loading ? (
+                        <CircularProgress size={24} color="inherit" />
+                      ) : (
+                        t.auth.verifyPhone.generateButton
+                      )}
                     </Button>
                   )}
 
@@ -212,7 +188,7 @@ export default function VerifyPhonePage() {
                           <Typography variant="caption" sx={{ fontWeight: 700, color: 'rgba(0,0,0,0.5)' }}>
                             {t.auth.verifyPhone.codeLabel}
                           </Typography>
-                          
+
                           <Paper
                             sx={{
                               p: 3,
@@ -222,7 +198,10 @@ export default function VerifyPhonePage() {
                               position: 'relative',
                             }}
                           >
-                            <Typography variant="h3" sx={{ fontWeight: 700, fontFamily: 'monospace', letterSpacing: 4 }}>
+                            <Typography
+                              variant="h3"
+                              sx={{ fontWeight: 700, fontFamily: 'monospace', letterSpacing: 4 }}
+                            >
                               {otpCode}
                             </Typography>
                             <IconButton
@@ -242,9 +221,7 @@ export default function VerifyPhonePage() {
                             </IconButton>
                           </Paper>
 
-                          <Alert severity="info">
-                            {t.auth.verifyPhone.sendInstructions}
-                          </Alert>
+                          <Alert severity="info">{t.auth.verifyPhone.sendInstructions}</Alert>
 
                           <Button
                             fullWidth

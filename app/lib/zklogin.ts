@@ -1,65 +1,76 @@
+/**
+ * zkLogin infrastructure layer.
+ *
+ * Responsibilities:
+ *   • SUI SDK interactions (epoch, nonce, address derivation, JWT decoding).
+ *   • User-salt generation & validation.
+ *   • Session / pending-login persistence (localStorage / sessionStorage).
+ *   • OAuth URL construction.
+ *
+ * This module does NOT perform any network calls to the AgentBE – those live
+ * in `app/services/api.ts`.
+ */
+
 import { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
-import { decodeJwt, generateNonce, generateRandomness, getExtendedEphemeralPublicKey, jwtToAddress } from '@mysten/sui/zklogin';
+import {
+  decodeJwt,
+  generateNonce,
+  generateRandomness,
+  getExtendedEphemeralPublicKey,
+  jwtToAddress,
+} from '@mysten/sui/zklogin';
 
-export type OAuthProvider = 'google' | 'facebook';
+import type {
+  OAuthProvider,
+  ZkLoginPending,
+  ZkLoginSession,
+} from '../types/zklogin';
 
-export type ZkLoginPending = {
-  provider: OAuthProvider;
-  nonce: string;
-  maxEpoch: string;
-  randomness: string;
-  secretKey: string;
-  userSalt: string;
-  ephemeralPublicKey: string;
-  jwt?: string;
-};
+// Re-export types so existing consumers that import from this file still work
+export type { OAuthProvider, ZkLoginPending, ZkLoginSession } from '../types/zklogin';
 
-export type ZkLoginSession = {
-  provider: OAuthProvider;
-  address: string;
-  jwt: string;
-  userSalt: string;
-  maxEpoch: string;
-  randomness: string;
-  iss: string;
-  sub: string;
-  aud: string | string[];
-  exp?: number;
-  accessToken?: string;
-  isNewUser?: boolean;
-  phoneVerified?: boolean;
-};
-
-export type AgentBESaltResponse = {
-  exists: boolean;
-  salt: string | null;
-};
-
-export type AgentBELoginResponse = {
-  accessToken: string;
-  user: {
-    id: string;
-    suiAddress: string;
-    phoneVerified: boolean;
-    status: 'PENDING_PHONE' | 'ACTIVE';
-  };
-};
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
 
 const SESSION_KEY = 'zklogin-session';
 const PENDING_PREFIX = 'zklogin:pending:';
 
-const defaultRpcUrl = process.env.NEXT_PUBLIC_SUI_RPC_URL || 'https://fullnode.testnet.sui.io:443';
-const suiNetwork = (process.env.NEXT_PUBLIC_SUI_NETWORK as 'mainnet' | 'testnet' | 'devnet' | 'localnet' | undefined) || 'testnet';
+// ---------------------------------------------------------------------------
+// SUI client (singleton)
+// ---------------------------------------------------------------------------
+
+const defaultRpcUrl =
+  process.env.NEXT_PUBLIC_SUI_RPC_URL || 'https://fullnode.testnet.sui.io:443';
+const suiNetwork =
+  (process.env.NEXT_PUBLIC_SUI_NETWORK as
+    | 'mainnet'
+    | 'testnet'
+    | 'devnet'
+    | 'localnet'
+    | undefined) || 'testnet';
 const suiClient = new SuiJsonRpcClient({ url: defaultRpcUrl, network: suiNetwork });
 
-function getRedirectUri(origin?: string) {
+// ---------------------------------------------------------------------------
+// Redirect URI
+// ---------------------------------------------------------------------------
+
+function getRedirectUri(origin?: string): string {
   const baseUrl = (origin || process.env.NEXT_PUBLIC_FRONTEND_URL || '').replace(/\/$/, '');
   const path = process.env.NEXT_PUBLIC_OAUTH_REDIRECT_PATH || '/auth/callback';
   return `${baseUrl}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
-function toBase64(json: unknown) {
+export function getStoredRedirectUri(): string {
+  return getRedirectUri(typeof window !== 'undefined' ? window.location.origin : undefined);
+}
+
+// ---------------------------------------------------------------------------
+// Base64 helpers
+// ---------------------------------------------------------------------------
+
+function toBase64(json: unknown): string {
   return typeof window === 'undefined'
     ? ''
     : btoa(unescape(encodeURIComponent(JSON.stringify(json))));
@@ -74,8 +85,19 @@ function fromBase64<T>(value: string | null): T | null {
   }
 }
 
+export function decodeState<T>(value: string | null): T | null {
+  return fromBase64<T>(value);
+}
+
+// ---------------------------------------------------------------------------
+// Salt generation & validation
+// ---------------------------------------------------------------------------
+
+/**
+ * Generate a cryptographically-random user salt (< 2^128) suitable for
+ * zkLogin.
+ */
 export function generateUserSalt(): string {
-  // El salt debe ser un valor de 16 bytes o menor a 2^128 según la doc de zkLogin
   const array = new Uint8Array(16);
   crypto.getRandomValues(array);
   const hex = Array.from(array)
@@ -84,16 +106,20 @@ export function generateUserSalt(): string {
   return BigInt(`0x${hex}`).toString();
 }
 
-function isValidUserSalt(salt: string): boolean {
+/** Return `true` when the salt is a valid BN254-field element (0 < salt < 2^128). */
+export function isValidUserSalt(salt: string): boolean {
   try {
-    const saltBigInt = BigInt(salt);
-    // El salt debe ser menor a 2^128 para estar en el campo BN254
+    const v = BigInt(salt);
     const MAX_SALT = BigInt(2) ** BigInt(128);
-    return saltBigInt > 0 && saltBigInt < MAX_SALT;
+    return v > BigInt(0) && v < MAX_SALT;
   } catch {
     return false;
   }
 }
+
+// ---------------------------------------------------------------------------
+// Session (localStorage)
+// ---------------------------------------------------------------------------
 
 export function getStoredSession(): ZkLoginSession | null {
   if (typeof window === 'undefined') return null;
@@ -101,9 +127,8 @@ export function getStoredSession(): ZkLoginSession | null {
   if (!raw) return null;
   try {
     const session = JSON.parse(raw) as ZkLoginSession;
-    // Validar que el userSalt sea válido (< 2^128)
     if (!isValidUserSalt(session.userSalt)) {
-      console.warn('Sesión con userSalt inválido detectada, limpiando...');
+      console.warn('[zklogin] Invalid userSalt detected – clearing session');
       clearSession();
       return null;
     }
@@ -113,25 +138,36 @@ export function getStoredSession(): ZkLoginSession | null {
   }
 }
 
-export function persistSession(session: ZkLoginSession) {
+export function persistSession(session: ZkLoginSession): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
 }
 
-export function clearSession() {
+export function clearSession(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem(SESSION_KEY);
 }
 
-export function storePendingLogin(pending: ZkLoginPending) {
+// ---------------------------------------------------------------------------
+// Pending login (sessionStorage)
+// ---------------------------------------------------------------------------
+
+export function storePendingLogin(pending: ZkLoginPending): void {
   if (typeof window === 'undefined') return;
   sessionStorage.setItem(`${PENDING_PREFIX}${pending.nonce}`, JSON.stringify(pending));
 }
 
-export function persistPendingLogin(nonce: string, updatedPending: Partial<ZkLoginPending>) {
+/**
+ * Merge partial data into an existing pending entry (e.g. adding the JWT
+ * after the OAuth code exchange for new users).
+ */
+export function persistPendingLogin(
+  nonce: string,
+  updatedPending: Partial<ZkLoginPending>,
+): void {
   if (typeof window === 'undefined') return;
-  const existing = readPendingLogin(nonce) || { nonce };
-  const merged = { ...existing, ...updatedPending, nonce } as ZkLoginPending;
+  const existing = readPendingLogin(nonce) || ({ nonce } as ZkLoginPending);
+  const merged: ZkLoginPending = { ...existing, ...updatedPending, nonce } as ZkLoginPending;
   sessionStorage.setItem(`${PENDING_PREFIX}${nonce}`, JSON.stringify(merged));
 }
 
@@ -146,61 +182,37 @@ export function readPendingLogin(nonce: string): ZkLoginPending | null {
   }
 }
 
-export function removePendingLogin(nonce: string) {
+export function removePendingLogin(nonce: string): void {
   if (typeof window === 'undefined') return;
   sessionStorage.removeItem(`${PENDING_PREFIX}${nonce}`);
 }
 
-export async function buildZkLoginRequest(provider: OAuthProvider) {
-  const clientId =
-    provider === 'google'
-      ? process.env.NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID
-      : process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
+// ---------------------------------------------------------------------------
+// Address derivation & JWT helpers
+// ---------------------------------------------------------------------------
 
-  if (!clientId) throw new Error(`Falta configurar el clientId de ${provider}`);
-
-  const systemState = await suiClient.getLatestSuiSystemState();
-  const currentEpoch = Number(systemState?.epoch || 0);
-  const maxEpoch = currentEpoch + 2;
-  const randomness = generateRandomness();
-  const keypair = Ed25519Keypair.generate();
-  const nonce = generateNonce(keypair.getPublicKey(), maxEpoch, randomness);
-  
-  // Reusar o generar userSalt, validando que sea < 2^128
-  const existingSalt = getStoredSession()?.userSalt;
-  const userSalt = (existingSalt && isValidUserSalt(existingSalt)) ? existingSalt : generateUserSalt();
-  
-  const redirectUri = getRedirectUri(typeof window !== 'undefined' ? window.location.origin : undefined);
-
-  const state = toBase64({ nonce, provider });
-  const authUrl = buildAuthUrl(provider, {
-    clientId,
-    nonce,
-    redirectUri,
-    state,
-  });
-
-  storePendingLogin({
-    provider,
-    nonce,
-    maxEpoch: String(maxEpoch),
-    randomness,
-    secretKey: keypair.getSecretKey(),
-    userSalt,
-    ephemeralPublicKey: getExtendedEphemeralPublicKey(keypair.getPublicKey()),
-  });
-
-  return { authUrl, nonce };
+export function deriveAddress(jwt: string, userSalt: string, legacyAddress = false): string {
+  return jwtToAddress(jwt, BigInt(userSalt), legacyAddress);
 }
 
-export function decodeState<T>(value: string | null): T | null {
-  return fromBase64<T>(value);
+export function parseJwt(jwt: string) {
+  return decodeJwt(jwt);
 }
+
+export function normalizeAudience(aud: unknown): string | string[] {
+  if (Array.isArray(aud)) return aud as string[];
+  if (typeof aud === 'string') return aud;
+  return [] as string[];
+}
+
+// ---------------------------------------------------------------------------
+// OAuth URL builder
+// ---------------------------------------------------------------------------
 
 function buildAuthUrl(
   provider: OAuthProvider,
   params: { clientId: string; nonce: string; redirectUri: string; state: string },
-) {
+): string {
   const url =
     provider === 'google'
       ? new URL('https://accounts.google.com/o/oauth2/v2/auth')
@@ -224,61 +236,48 @@ function buildAuthUrl(
   return url.toString();
 }
 
-export function deriveAddress(jwt: string, userSalt: string, legacyAddress = false) {
-  return jwtToAddress(jwt, BigInt(userSalt), legacyAddress);
-}
+// ---------------------------------------------------------------------------
+// High-level: build the full zkLogin request (epoch + nonce + URL)
+// ---------------------------------------------------------------------------
 
-export function parseJwt(jwt: string) {
-  return decodeJwt(jwt);
-}
+export async function buildZkLoginRequest(provider: OAuthProvider) {
+  const clientId =
+    provider === 'google'
+      ? process.env.NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID
+      : process.env.NEXT_PUBLIC_FACEBOOK_APP_ID;
 
-export function getStoredRedirectUri() {
-  return getRedirectUri(typeof window !== 'undefined' ? window.location.origin : undefined);
-}
+  if (!clientId) throw new Error(`Missing OAuth clientId for ${provider}`);
 
-export function normalizeAudience(aud: unknown): string | string[] {
-  if (Array.isArray(aud)) return aud as string[];
-  if (typeof aud === 'string') return aud;
-  return [] as string[];
-}
+  const systemState = await suiClient.getLatestSuiSystemState();
+  const currentEpoch = Number(systemState?.epoch || 0);
+  const maxEpoch = currentEpoch + 2;
+  const randomness = generateRandomness();
+  const keypair = Ed25519Keypair.generate();
+  const nonce = generateNonce(keypair.getPublicKey(), maxEpoch, randomness);
 
-export async function checkExistingUserSalt(jwt: string, provider: OAuthProvider): Promise<AgentBESaltResponse> {
-  const agentUrl = (process.env.NEXT_PUBLIC_AGENT_BE_URL || '').replace(/\/$/, '');
-  if (!agentUrl) throw new Error('NEXT_PUBLIC_AGENT_BE_URL no está configurado');
+  // Reuse valid existing salt or generate a fresh one
+  const existingSalt = getStoredSession()?.userSalt;
+  const userSalt =
+    existingSalt && isValidUserSalt(existingSalt)
+      ? existingSalt
+      : generateUserSalt();
 
-  const providerUpper = provider.toUpperCase();
-  const res = await fetch(`${agentUrl}/v1/auth/salt`, {
-    headers: {
-      'x-oauth-token': jwt,
-      'x-auth-provider': providerUpper,
-    },
+  const redirectUri = getRedirectUri(
+    typeof window !== 'undefined' ? window.location.origin : undefined,
+  );
+
+  const state = toBase64({ nonce, provider });
+  const authUrl = buildAuthUrl(provider, { clientId, nonce, redirectUri, state });
+
+  storePendingLogin({
+    provider,
+    nonce,
+    maxEpoch: String(maxEpoch),
+    randomness,
+    secretKey: keypair.getSecretKey(),
+    userSalt,
+    ephemeralPublicKey: getExtendedEphemeralPublicKey(keypair.getPublicKey()),
   });
 
-  if (!res.ok) {
-    throw new Error(`Error consultando salt: ${res.statusText}`);
-  }
-
-  return await res.json();
-}
-
-export async function registerOrLoginUser(
-  jwt: string,
-  suiAddress: string,
-  salt: string
-): Promise<AgentBELoginResponse> {
-  const agentUrl = (process.env.NEXT_PUBLIC_AGENT_BE_URL || '').replace(/\/$/, '');
-  if (!agentUrl) throw new Error('NEXT_PUBLIC_AGENT_BE_URL no está configurado');
-
-  const res = await fetch(`${agentUrl}/v1/auth/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ jwt, suiAddress, salt }),
-  });
-
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({}));
-    throw new Error(error?.message || `Error en login/registro: ${res.statusText}`);
-  }
-
-  return await res.json();
+  return { authUrl, nonce };
 }

@@ -24,14 +24,14 @@ import { GlassCard } from '../../components/GlassCard';
 import ParticleBackground from '../../components/ParticleBackground';
 import { useI18n } from '../../lib/i18n';
 import { useMounted } from '../../lib/useMounted';
-import { 
-  deriveAddress, 
-  parseJwt, 
+import {
+  deriveAddress,
+  parseJwt,
   readPendingLogin,
-  registerOrLoginUser,
   persistSession,
-  ZkLoginSession,
 } from '../../lib/zklogin';
+import { registerOrLoginUser } from '../../services/api';
+import type { ZkLoginSession } from '../../types/zklogin';
 
 export default function ConfirmAccountPage() {
   const { t } = useI18n();
@@ -52,10 +52,10 @@ export default function ConfirmAccountPage() {
       return;
     }
 
-    // Recuperar el pending login del sessionStorage
+    // Retrieve the pending login from sessionStorage
     const allKeys = Object.keys(sessionStorage);
     const pendingKey = allKeys.find(k => k.startsWith('zklogin:pending:'));
-    
+
     if (!pendingKey) {
       router.push('/auth/login');
       return;
@@ -63,18 +63,18 @@ export default function ConfirmAccountPage() {
 
     const nonce = pendingKey.replace('zklogin:pending:', '');
     const pending = readPendingLogin(nonce);
-    
+
     if (!pending || !pending.jwt) {
       router.push('/auth/login');
       return;
     }
 
-    // Derivar la dirección
+    // Derive the Sui address from JWT + salt
     try {
       const derivedAddress = deriveAddress(pending.jwt, salt, false);
       setAddress(derivedAddress);
     } catch (err) {
-      console.error('Error derivando dirección:', err);
+      console.error('Error deriving address:', err);
       setError(t.auth.confirmAccount.errorDerivingAddress);
     }
   }, [salt, provider, router, t.auth.confirmAccount.errorDerivingAddress]);
@@ -86,7 +86,7 @@ export default function ConfirmAccountPage() {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
-      console.error('Error al copiar:', err);
+      console.error('Error copying:', err);
     }
   };
 
@@ -97,24 +97,23 @@ export default function ConfirmAccountPage() {
     setError(null);
 
     try {
-      // Recuperar el JWT del pending login
+      // Retrieve the JWT from the pending login entry
       const allKeys = Object.keys(sessionStorage);
       const pendingKey = allKeys.find(k => k.startsWith('zklogin:pending:'));
-      
-      if (!pendingKey) throw new Error('No se encontró sesión pendiente');
+
+      if (!pendingKey) throw new Error('No pending session found');
 
       const nonce = pendingKey.replace('zklogin:pending:', '');
       const pending = readPendingLogin(nonce);
-      
-      if (!pending || !pending.jwt) throw new Error('JWT no disponible');
 
-      // Llamar al endpoint de registro/login
+      if (!pending || !pending.jwt) throw new Error('JWT not available');
+
+      // Register or login via the service layer
       const response = await registerOrLoginUser(pending.jwt, address, salt);
 
-      // Decodificar JWT para obtener claims
-      const decodedJwt = parseJwt(pending.jwt);
+      // Decode JWT for session claims
+      const decoded = parseJwt(pending.jwt);
 
-      // Crear sesión con toda la info
       const session: ZkLoginSession = {
         provider: provider!,
         address,
@@ -122,10 +121,10 @@ export default function ConfirmAccountPage() {
         userSalt: salt,
         maxEpoch: pending.maxEpoch,
         randomness: pending.randomness,
-        iss: decodedJwt.iss,
-        sub: decodedJwt.sub,
-        aud: decodedJwt.aud,
-        exp: decodedJwt.exp,
+        iss: decoded.iss,
+        sub: decoded.sub,
+        aud: decoded.aud,
+        exp: decoded.exp,
         accessToken: response.accessToken,
         isNewUser: true,
         phoneVerified: response.user.phoneVerified,
@@ -133,7 +132,7 @@ export default function ConfirmAccountPage() {
 
       persistSession(session);
 
-      // Redirigir según el estado
+      // Redirect based on user status
       if (response.user.status === 'PENDING_PHONE') {
         router.push('/auth/verify-phone');
       } else {
@@ -188,11 +187,11 @@ export default function ConfirmAccountPage() {
               <CardContent sx={{ p: { xs: 4, md: 6 } }}>
                 <Stack spacing={3} alignItems="center">
                   <AccountBalanceWalletIcon sx={{ fontSize: 64, color: '#000' }} />
-                  
+
                   <Typography variant="h4" sx={{ fontWeight: 800, textAlign: 'center' }}>
                     {t.auth.confirmAccount.title}
                   </Typography>
-                  
+
                   <Typography variant="body1" color="text.secondary" textAlign="center">
                     {t.auth.confirmAccount.subtitle}
                   </Typography>
@@ -203,7 +202,7 @@ export default function ConfirmAccountPage() {
                         <Typography variant="caption" sx={{ fontWeight: 700, color: 'rgba(0,0,0,0.5)' }}>
                           {t.auth.confirmAccount.addressLabel}
                         </Typography>
-                        
+
                         <Box sx={{ textAlign: 'center', py: 2 }}>
                           <Typography variant="h5" sx={{ fontWeight: 700, mb: 1, fontFamily: 'monospace' }}>
                             {shortAddress}

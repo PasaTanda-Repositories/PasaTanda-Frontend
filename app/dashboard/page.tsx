@@ -5,15 +5,15 @@ import {
   Alert,
   Box,
   Button,
+  Card,
   CardContent,
+  Chip,
+  CircularProgress,
   Container,
   Fade,
   Grid,
   Stack,
   Typography,
-  CircularProgress,
-  Card,
-  Chip,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import GroupAddIcon from '@mui/icons-material/GroupAdd';
@@ -27,14 +27,8 @@ import ParticleBackground from '../components/ParticleBackground';
 import { useI18n } from '../lib/i18n';
 import { useMounted } from '../lib/useMounted';
 import { getStoredSession } from '../lib/zklogin';
-
-interface Group {
-  id: string;
-  name: string;
-  totalMembers: number;
-  currentRound: number;
-  status: 'ACTIVE' | 'PENDING' | 'COMPLETED';
-}
+import { fetchMyGroups } from '../services/api';
+import type { AgentBEGroup } from '../types/zklogin';
 
 export default function DashboardPage() {
   const { t } = useI18n();
@@ -42,7 +36,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [groups, setGroups] = useState<Group[]>([]);
+  const [groups, setGroups] = useState<AgentBEGroup[]>([]);
 
   const session = getStoredSession();
 
@@ -52,30 +46,16 @@ export default function DashboardPage() {
       return;
     }
 
-    // If phone not verified, redirect to verify
+    // If phone not verified, redirect to verification page
     if (!session.phoneVerified) {
       router.push('/auth/verify-phone');
       return;
     }
 
-    // Fetch user's groups
-    const fetchGroups = async () => {
+    const load = async () => {
       try {
-        const baseUrl = process.env.NEXT_PUBLIC_AGENT_BE_URL || '';
-        const res = await fetch(`${baseUrl}/v1/groups`, {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${session.accessToken}`,
-          },
-        });
-
-        const data = await res.json();
-
-        if (!res.ok) {
-          throw new Error(data?.message || 'Failed to fetch groups');
-        }
-
-        setGroups(data.groups || []);
+        const data = await fetchMyGroups(session.accessToken!);
+        setGroups(data);
       } catch (err) {
         const message = err instanceof Error ? err.message : t.dashboard.errorLoading;
         setError(message);
@@ -84,8 +64,9 @@ export default function DashboardPage() {
       }
     };
 
-    fetchGroups();
-  }, [session, router, t.dashboard.errorLoading]);
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!session) {
     return (
@@ -128,7 +109,12 @@ export default function DashboardPage() {
               {/* User info header */}
               <GlassCard variant="mica" intensity="medium" glow sx={{ mb: 4 }}>
                 <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems="center" justifyContent="space-between">
+                  <Stack
+                    direction={{ xs: 'column', sm: 'row' }}
+                    spacing={2}
+                    alignItems="center"
+                    justifyContent="space-between"
+                  >
                     <Stack direction="row" spacing={2} alignItems="center">
                       <AccountBalanceWalletIcon sx={{ fontSize: 48, color: '#000' }} />
                       <Box>
@@ -140,8 +126,8 @@ export default function DashboardPage() {
                         </Typography>
                       </Box>
                     </Stack>
-                    <Chip 
-                      label={session.phoneVerified ? t.dashboard.verified : t.dashboard.pending} 
+                    <Chip
+                      label={session.phoneVerified ? t.dashboard.verified : t.dashboard.pending}
                       color={session.phoneVerified ? 'success' : 'warning'}
                       sx={{ fontWeight: 700 }}
                     />
@@ -166,33 +152,29 @@ export default function DashboardPage() {
                   <CardContent sx={{ p: { xs: 4, md: 6 } }}>
                     <Stack spacing={4} alignItems="center">
                       <GroupsIcon sx={{ fontSize: 80, color: 'rgba(0,0,0,0.3)' }} />
-                      
+
                       <Typography variant="h5" sx={{ fontWeight: 800, textAlign: 'center' }}>
                         {t.dashboard.empty}
                       </Typography>
-                      
+
                       <Typography variant="body1" color="text.secondary" textAlign="center">
                         {t.dashboard.emptySubtitle}
                       </Typography>
 
                       <Grid container spacing={2} sx={{ mt: 2, maxWidth: 600 }}>
-                        <Grid item xs={12} sm={6}>
+                        <Grid size={{ xs: 12, sm: 6 }}>
                           <Button
                             fullWidth
                             variant="contained"
                             size="large"
                             startIcon={<AddIcon />}
                             onClick={() => router.push('/onboarding/verify')}
-                            sx={{
-                              bgcolor: '#000',
-                              '&:hover': { bgcolor: '#111' },
-                              py: 2,
-                            }}
+                            sx={{ bgcolor: '#000', '&:hover': { bgcolor: '#111' }, py: 2 }}
                           >
                             {t.dashboard.createTanda}
                           </Button>
                         </Grid>
-                        <Grid item xs={12} sm={6}>
+                        <Grid size={{ xs: 12, sm: 6 }}>
                           <Button
                             fullWidth
                             variant="outlined"
@@ -226,10 +208,7 @@ export default function DashboardPage() {
                         variant="contained"
                         startIcon={<AddIcon />}
                         onClick={() => router.push('/onboarding/verify')}
-                        sx={{
-                          bgcolor: '#000',
-                          '&:hover': { bgcolor: '#111' },
-                        }}
+                        sx={{ bgcolor: '#000', '&:hover': { bgcolor: '#111' } }}
                       >
                         {t.dashboard.createTanda}
                       </Button>
@@ -250,14 +229,12 @@ export default function DashboardPage() {
 
                   <Grid container spacing={3}>
                     {groups.map((group) => (
-                      <Grid item xs={12} md={6} lg={4} key={group.id}>
+                      <Grid size={{ xs: 12, md: 6, lg: 4 }} key={group.id}>
                         <Card
                           sx={{
                             cursor: 'pointer',
                             transition: 'transform 0.2s',
-                            '&:hover': {
-                              transform: 'translateY(-4px)',
-                            },
+                            '&:hover': { transform: 'translateY(-4px)' },
                           }}
                           onClick={() => router.push(`/pagos/${group.id}`)}
                         >
@@ -270,15 +247,21 @@ export default function DashboardPage() {
                                 <Chip
                                   label={group.status}
                                   size="small"
-                                  color={group.status === 'ACTIVE' ? 'success' : group.status === 'PENDING' ? 'warning' : 'default'}
+                                  color={
+                                    group.status === 'ACTIVE'
+                                      ? 'success'
+                                      : group.status === 'PENDING'
+                                        ? 'warning'
+                                        : 'default'
+                                  }
                                 />
                               </Stack>
                               <Box>
                                 <Typography variant="body2" color="text.secondary">
-                                  {t.dashboard.members}: {group.totalMembers}
+                                  {t.dashboard.members}: {group.totalMembers ?? '—'}
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary">
-                                  {t.dashboard.currentRound}: {group.currentRound}
+                                  {t.dashboard.currentRound}: {group.currentRound ?? '—'}
                                 </Typography>
                               </Box>
                             </Stack>

@@ -24,7 +24,12 @@ import { GlassCard } from '../../components/GlassCard';
 import ParticleBackground from '../../components/ParticleBackground';
 import { useI18n } from '../../lib/i18n';
 import { useMounted } from '../../lib/useMounted';
-import { OAuthProvider, ZkLoginSession, buildZkLoginRequest, clearSession, getStoredSession } from '../../lib/zklogin';
+import {
+  buildZkLoginRequest,
+  clearSession,
+  getStoredSession,
+} from '../../lib/zklogin';
+import type { OAuthProvider, ZkLoginSession } from '../../types/zklogin';
 
 export default function LoginPage() {
   const { t } = useI18n();
@@ -41,7 +46,7 @@ export default function LoginPage() {
       const { authUrl } = await buildZkLoginRequest(provider);
       window.location.href = authUrl;
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'No se pudo iniciar sesión';
+      const message = err instanceof Error ? err.message : 'Could not start login';
       setError(message);
       setLoadingProvider(null);
     }
@@ -93,22 +98,24 @@ export default function LoginPage() {
                           {t.login.subtitle}
                         </Typography>
                         <Stack spacing={1}>
-                          {[t.hero.metrics[0].label, t.onboarding.title, t.login.addressLabel].map((label, idx) => (
-                            <Stack key={idx} direction="row" spacing={2} alignItems="center">
-                              <Box
-                                sx={{
-                                  width: 10,
-                                  height: 10,
-                                  borderRadius: '50%',
-                                  bgcolor: '#000',
-                                  flexShrink: 0,
-                                }}
-                              />
-                              <Typography variant="body2" color="text.secondary">
-                                {label}
-                              </Typography>
-                            </Stack>
-                          ))}
+                          {[t.hero.metrics[0].label, t.onboarding.title, t.login.addressLabel].map(
+                            (label, idx) => (
+                              <Stack key={idx} direction="row" spacing={2} alignItems="center">
+                                <Box
+                                  sx={{
+                                    width: 10,
+                                    height: 10,
+                                    borderRadius: '50%',
+                                    bgcolor: '#000',
+                                    flexShrink: 0,
+                                  }}
+                                />
+                                <Typography variant="body2" color="text.secondary">
+                                  {label}
+                                </Typography>
+                              </Stack>
+                            ),
+                          )}
                         </Stack>
                       </Stack>
                     </Grid>
@@ -131,12 +138,13 @@ export default function LoginPage() {
                               startIcon={<GoogleIcon />}
                               disabled={!!loadingProvider}
                               onClick={() => handleLogin('google')}
-                              sx={{
-                                bgcolor: '#000',
-                                '&:hover': { bgcolor: '#111' },
-                              }}
+                              sx={{ bgcolor: '#000', '&:hover': { bgcolor: '#111' } }}
                             >
-                              {loadingProvider === 'google' ? <CircularProgress size={20} color="inherit" /> : t.login.google}
+                              {loadingProvider === 'google' ? (
+                                <CircularProgress size={20} color="inherit" />
+                              ) : (
+                                t.login.google
+                              )}
                             </Button>
                             <Button
                               fullWidth
@@ -147,7 +155,11 @@ export default function LoginPage() {
                               onClick={() => handleLogin('facebook')}
                               sx={{ borderWidth: 2 }}
                             >
-                              {loadingProvider === 'facebook' ? <CircularProgress size={20} /> : t.login.facebook}
+                              {loadingProvider === 'facebook' ? (
+                                <CircularProgress size={20} />
+                              ) : (
+                                t.login.facebook
+                              )}
                             </Button>
                             <Button fullWidth size="large" variant="text" startIcon={<AppleIcon />} disabled>
                               {t.login.apple}
@@ -170,9 +182,13 @@ export default function LoginPage() {
                     {session ? (
                       <Alert icon={<CheckCircleIcon fontSize="inherit" />} severity="success">
                         <Stack spacing={0.5}>
-                          <Typography variant="body2">{t.login.addressLabel}: {session.address}</Typography>
+                          <Typography variant="body2">
+                            {t.login.addressLabel}: {session.address}
+                          </Typography>
                           <Typography variant="body2">Provider: {session.provider}</Typography>
-                          <Typography variant="body2">Exp: {session.exp ? new Date(session.exp * 1000).toLocaleString() : '—'}</Typography>
+                          <Typography variant="body2">
+                            Exp: {session.exp ? new Date(session.exp * 1000).toLocaleString() : '—'}
+                          </Typography>
                         </Stack>
                       </Alert>
                     ) : (

@@ -21,22 +21,26 @@ import ParticleBackground from '../../components/ParticleBackground';
 import { useI18n } from '../../lib/i18n';
 import { useMounted } from '../../lib/useMounted';
 import {
-  OAuthProvider,
-  ZkLoginSession,
   decodeState,
   deriveAddress,
   generateUserSalt,
   getStoredRedirectUri,
   parseJwt,
   persistSession,
+  persistPendingLogin,
   readPendingLogin,
   removePendingLogin,
+} from '../../lib/zklogin';
+import {
+  exchangeOAuthCode,
   checkExistingUserSalt,
   registerOrLoginUser,
-  persistPendingLogin,
-} from '../../lib/zklogin';
+} from '../../services/api';
+import type { OAuthStatePayload, ZkLoginSession } from '../../types/zklogin';
 
-type StatePayload = { nonce: string; provider: OAuthProvider };
+// ---------------------------------------------------------------------------
+// Inner component (needs useSearchParams → must be inside Suspense)
+// ---------------------------------------------------------------------------
 
 function CallbackContent() {
   const { t } = useI18n();
@@ -58,7 +62,7 @@ function CallbackContent() {
       return;
     }
 
-    const parsedState = decodeState<StatePayload>(stateParam);
+    const parsedState = decodeState<OAuthStatePayload>(stateParam);
     if (!code || !parsedState?.nonce || !parsedState?.provider) {
       setStatus('error');
       setMessage('Missing callback parameters');
@@ -77,32 +81,27 @@ function CallbackContent() {
       setMessage(t.login.callbackProcessing);
 
       try {
-        // Exchange OAuth code for id_token
-        const res = await fetch('/api/oauth/token', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            provider: parsedState.provider,
-            code,
-            redirectUri: getStoredRedirectUri(),
-          }),
+        // 1. Exchange OAuth code for id_token via Next.js proxy
+        const tokenData = await exchangeOAuthCode({
+          provider: parsedState.provider,
+          code,
+          redirectUri: getStoredRedirectUri(),
         });
 
-        const data = await res.json();
-        if (!res.ok || !data?.id_token) {
-          throw new Error(data?.error || 'Failed to get token');
+        if (!tokenData.id_token) {
+          throw new Error(tokenData.error || 'Failed to get id_token');
         }
 
-        const jwt = data.id_token;
+        const jwt = tokenData.id_token;
 
-        // Check if user already exists in AgentBE
+        // 2. Check whether the user already has a salt in AgentBE
         const saltResponse = await checkExistingUserSalt(jwt, parsedState.provider);
 
         if (saltResponse.exists && saltResponse.salt) {
-          // EXISTING USER - Login flow
+          // ── EXISTING USER ── login flow
           const address = deriveAddress(jwt, saltResponse.salt, false);
           const loginResponse = await registerOrLoginUser(jwt, address, saltResponse.salt);
-          const decodedJwt = parseJwt(jwt);
+          const decoded = parseJwt(jwt);
 
           const newSession: ZkLoginSession = {
             provider: parsedState.provider,
@@ -111,10 +110,10 @@ function CallbackContent() {
             userSalt: saltResponse.salt,
             maxEpoch: pending.maxEpoch,
             randomness: pending.randomness,
-            iss: decodedJwt.iss,
-            sub: decodedJwt.sub,
-            aud: decodedJwt.aud,
-            exp: decodedJwt.exp,
+            iss: decoded.iss,
+            sub: decoded.sub,
+            aud: decoded.aud,
+            exp: decoded.exp,
             accessToken: loginResponse.accessToken,
             isNewUser: false,
             phoneVerified: loginResponse.user.phoneVerified,
@@ -127,7 +126,6 @@ function CallbackContent() {
           setMessage(t.login.callbackSuccess);
 
           setTimeout(() => {
-            // Redirect based on phone verification status
             if (loginResponse.user.status === 'PENDING_PHONE') {
               router.push('/auth/verify-phone');
             } else {
@@ -135,16 +133,12 @@ function CallbackContent() {
             }
           }, 1400);
         } else {
-          // NEW USER - Registration flow
+          // ── NEW USER ── registration flow → save-salt page
           const newSalt = generateUserSalt();
 
-          // Store JWT in pending for next steps
-          persistPendingLogin(parsedState.nonce, {
-            ...pending,
-            jwt,
-          });
+          // Persist the JWT inside the pending entry so confirm-account can use it
+          persistPendingLogin(parsedState.nonce, { jwt });
 
-          // Redirect to save-salt page
           const params = new URLSearchParams({
             salt: newSalt,
             provider: parsedState.provider,
@@ -159,7 +153,10 @@ function CallbackContent() {
     };
 
     run();
-  }, [router, searchParams, t.login.callbackProcessing, t.login.callbackSuccess, t.login.callbackError]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router, searchParams]);
+
+  // ── UI ──────────────────────────────────────────────────────────────────
 
   return (
     <Box
@@ -205,8 +202,12 @@ function CallbackContent() {
                         {t.login.callbackSuccess}
                         {session && (
                           <Box sx={{ mt: 1 }}>
-                            <Typography variant="body2">{t.login.addressLabel}: {session.address}</Typography>
-                            <Typography variant="body2">Provider: {session.provider}</Typography>
+                            <Typography variant="body2">
+                              {t.login.addressLabel}: {session.address}
+                            </Typography>
+                            <Typography variant="body2">
+                              Provider: {session.provider}
+                            </Typography>
                           </Box>
                         )}
                       </Alert>
@@ -223,7 +224,12 @@ function CallbackContent() {
                     <Button component={Link} href="/auth/login" variant="outlined">
                       {t.login.retry}
                     </Button>
-                    <Button component={Link} href="/onboarding/verify" variant="contained" disabled={status !== 'success'}>
+                    <Button
+                      component={Link}
+                      href="/onboarding/verify"
+                      variant="contained"
+                      disabled={status !== 'success'}
+                    >
                       {t.login.continue}
                     </Button>
                   </Stack>
@@ -239,15 +245,19 @@ function CallbackContent() {
   );
 }
 
-// 3. Creamos un componente "Wrapper" que será el Default Export
+// ---------------------------------------------------------------------------
+// Default export – wraps in Suspense for useSearchParams
+// ---------------------------------------------------------------------------
+
 export default function CallbackPage() {
   return (
-    // El fallback es lo que se muestra mientras se carga el contenido dinámico (URL params)
-    <Suspense fallback={
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <CircularProgress />
-      </Box>
-    }>
+    <Suspense
+      fallback={
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+          <CircularProgress />
+        </Box>
+      }
+    >
       <CallbackContent />
     </Suspense>
   );
