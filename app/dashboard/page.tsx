@@ -236,7 +236,7 @@ export default function DashboardPage() {
                             transition: 'transform 0.2s',
                             '&:hover': { transform: 'translateY(-4px)' },
                           }}
-                          onClick={() => router.push(`/pagos/${group.id}`)}
+                          onClick={() => router.push(`/dashboard/${group.id}`)}
                         >
                           <CardContent>
                             <Stack spacing={2}>
