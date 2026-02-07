@@ -21,6 +21,12 @@ import { getStoredSession } from '../../lib/zklogin';
 import { fetchAdminGroupDashboard } from '../../services/api';
 import type { AgentBEGroupDashboard } from '../../types/zklogin';
 
+const formatDateTime = (value?: string | null) => {
+  if (!value) return '—';
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.valueOf()) ? '—' : parsed.toLocaleString();
+};
+
 export default function DashboardDetailPage() {
   const { t } = useI18n();
   const mounted = useMounted();
@@ -62,13 +68,17 @@ export default function DashboardDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupId, session?.accessToken]);
 
-  const participantsCount = data?.participants?.length ?? 0;
+  const participants = data?.participants ?? [];
+  const transactions = data?.transactions ?? [];
+  const participantsCount = participants.length;
   const hasConfig = Boolean(
     data?.group?.contributionAmount &&
       data?.group?.frequency &&
       data?.group?.totalRounds,
   );
   const readyToStart = participantsCount >= 2 && hasConfig && data?.group?.status !== 'ACTIVE';
+
+  const myStatus = data?.myStatus ?? '—';
 
   if (!mounted) {
     return (
@@ -113,6 +123,24 @@ export default function DashboardDetailPage() {
                     {data.group.name || groupId}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
+                    {t.dashboard.idLabel}: {data.group.id}
+                  </Typography>
+                {data.group.objectId && (
+                  <Typography variant="body2" color="text.secondary">
+                    {t.dashboard.objectIdLabel}: {data.group.objectId}
+                  </Typography>
+                )}
+                {data.group.inviteCode && (
+                  <Typography variant="body2" color="text.secondary">
+                    {t.dashboard.inviteCodeLabel}: {data.group.inviteCode}
+                  </Typography>
+                )}
+                {data.group.createdBy && (
+                  <Typography variant="body2" color="text.secondary">
+                    {t.dashboard.createdByLabel}: {data.group.createdBy}
+                  </Typography>
+                )}
+                  <Typography variant="body2" color="text.secondary">
                     {t.dashboard.status}: {data.group.status}
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
@@ -134,37 +162,105 @@ export default function DashboardDetailPage() {
               </CardContent>
             </GlassCard>
 
-            <GlassCard variant="frosted" intensity="low">
+            <Stack spacing={2}>
+              <GlassCard variant="frosted" intensity="low">
               <CardContent>
-                <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 800 }}>
-                    {t.dashboard.participants}
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2, gap: 2, flexWrap: 'wrap' }}>
+                    <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                      {t.dashboard.participants}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {t.dashboard.myStatusLabel}: {myStatus}
+                    </Typography>
+                    <Button variant="contained" disabled={!readyToStart}>
+                      {t.dashboard.startGroup}
+                    </Button>
+                  </Stack>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    {readyToStart ? t.dashboard.startReady : t.dashboard.startDisabled}
                   </Typography>
-                  <Button variant="contained" disabled={!readyToStart}>
-                    {t.dashboard.startGroup}
-                  </Button>
-                </Stack>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                  {readyToStart ? t.dashboard.startReady : t.dashboard.startDisabled}
-                </Typography>
-                <Grid container spacing={2}>
-                  {data.participants.map((p, idx) => (
-                    <Grid size={{ xs: 12, sm: 6, md: 4 }} key={`${p.alias || 'member'}-${idx}`}>
-                      <GlassCard variant="flat" intensity="low">
-                        <CardContent>
-                          <Typography variant="body1" sx={{ fontWeight: 700 }}>
-                            {p.alias || t.dashboard.anonymous}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">
-                            {p.status || '—'}
-                          </Typography>
-                        </CardContent>
-                      </GlassCard>
-                    </Grid>
-                  ))}
-                </Grid>
+                  <Grid container spacing={2}>
+                    {participants.map((p) => (
+                      <Grid item xs={12} sm={6} md={4} key={p.membershipId}>
+                        <GlassCard variant="default" intensity="low">
+                          <CardContent>
+                            <Typography variant="body1" sx={{ fontWeight: 700 }}>
+                              {p.alias || t.dashboard.anonymous}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {t.dashboard.turnLabel}: {p.turnNumber ?? '—'}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {p.isAdmin ? t.dashboard.adminLabel : t.dashboard.memberLabel} · {formatDateTime(p.joinedAt)}
+                            </Typography>
+                          </CardContent>
+                        </GlassCard>
+                      </Grid>
+                    ))}
+                    {participants.length === 0 && (
+                      <Grid item xs={12}>
+                        <Typography variant="body2" color="text.secondary">
+                          {t.dashboard.participantsEmpty}
+                        </Typography>
+                      </Grid>
+                    )}
+                  </Grid>
               </CardContent>
             </GlassCard>
+
+              <GlassCard variant="frosted" intensity="low">
+                <CardContent>
+                  <Stack spacing={2}>
+                    <Stack direction="row" justifyContent="space-between" alignItems="center">
+                      <Typography variant="h6" sx={{ fontWeight: 800 }}>
+                        {t.dashboard.transactionsTitle}
+                      </Typography>
+                      {transactions.length > 0 && (
+                        <Typography variant="body2" color="text.secondary">
+                          {transactions.length} {t.dashboard.transactionsRecords}
+                        </Typography>
+                      )}
+                    </Stack>
+                      {transactions.length === 0 ? (
+                        <Typography variant="body2" color="text.secondary">
+                          {t.dashboard.transactionsEmpty}
+                        </Typography>
+                      ) : (
+                      <Stack spacing={1}>
+                        {transactions.map((tx) => (
+                          <Box
+                            key={tx.id}
+                            sx={{
+                              borderRadius: 2,
+                              p: 1.5,
+                              bgcolor: 'background.paper',
+                              border: '1px solid rgba(0,0,0,0.05)',
+                            }}
+                          >
+                            <Stack direction="row" justifyContent="space-between" alignItems="center">
+                              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                                {tx.type} · {tx.method}
+                              </Typography>
+                              <Typography variant="body2" color="text.secondary">
+                                {tx.status}
+                              </Typography>
+                            </Stack>
+                            <Typography variant="body2" color="text.secondary">
+                              {tx.amount} {tx.currency} · {formatDateTime(tx.createdAt)}
+                            </Typography>
+                            {tx.externalPaymentUrl && (
+                              <Typography variant="body2" color="primary">
+                                {t.dashboard.transactionExternal}
+                              </Typography>
+                            )}
+                          </Box>
+                        ))}
+                      </Stack>
+                    )}
+                  </Stack>
+                </CardContent>
+              </GlassCard>
+            </Stack>
           </Stack>
         )}
       </Box>

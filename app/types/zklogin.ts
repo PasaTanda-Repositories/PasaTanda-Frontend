@@ -143,16 +143,38 @@ export interface AgentBEJoinResponse {
 /** Response from `GET /v1/groups/{id}/dashboard`. */
 export interface AgentBEGroupDashboard {
   group: {
-    objectId: string;
+    id: string;
+    name: string;
     status: string;
-    name?: string;
-    contributionAmount?: number;
-    guaranteeAmount?: number;
-    frequency?: FrequencyType;
-    totalRounds?: number;
-    totalMembers?: number;
+    objectId?: string | null;
+    contributionAmount?: number | null;
+    guaranteeAmount?: number | null;
+    frequency?: FrequencyType | null;
+    totalRounds?: number | null;
+    inviteCode?: string | null;
+    createdBy?: string | null;
+    totalMembers?: number | null;
   };
-  participants: Array<{ alias?: string; status?: string }>;
+  participants: Array<{
+    membershipId: string;
+    userId: string;
+    alias?: string | null;
+    isAdmin?: boolean;
+    turnNumber?: number | null;
+    joinedAt?: string | null;
+  }>;
+  transactions: Array<{
+    id: string;
+    userId: string;
+    type: string;
+    method: string;
+    status: string;
+    amount: number;
+    currency: string;
+    externalPaymentUrl?: string | null;
+    qrImageLink?: string | null;
+    createdAt?: string | null;
+  }>;
   myStatus?: string;
 }
 
