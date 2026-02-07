@@ -1,6 +1,5 @@
 "use client";
 
-// 1. Importa Suspense de react
 import { useEffect, useState, Suspense } from 'react';
 import {
   Alert,
@@ -26,22 +25,24 @@ import {
   ZkLoginSession,
   decodeState,
   deriveAddress,
+  generateUserSalt,
   getStoredRedirectUri,
   parseJwt,
   persistSession,
   readPendingLogin,
   removePendingLogin,
+  checkExistingUserSalt,
+  registerOrLoginUser,
+  persistPendingLogin,
 } from '../../lib/zklogin';
 
 type StatePayload = { nonce: string; provider: OAuthProvider };
 
-// 2. Renombramos tu componente original a "CallbackContent"
-//    y le quitamos el 'export default'
 function CallbackContent() {
   const { t } = useI18n();
   const mounted = useMounted();
   const router = useRouter();
-  const searchParams = useSearchParams(); // Esto es lo que causa el requisito de Suspense
+  const searchParams = useSearchParams();
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState<string>('');
   const [session, setSession] = useState<ZkLoginSession | null>(null);
@@ -60,14 +61,14 @@ function CallbackContent() {
     const parsedState = decodeState<StatePayload>(stateParam);
     if (!code || !parsedState?.nonce || !parsedState?.provider) {
       setStatus('error');
-      setMessage('Faltan parámetros del callback');
+      setMessage('Missing callback parameters');
       return;
     }
 
     const pending = readPendingLogin(parsedState.nonce);
     if (!pending) {
       setStatus('error');
-      setMessage('No existe un login pendiente. Intenta nuevamente.');
+      setMessage('No pending login found. Please try again.');
       return;
     }
 
@@ -76,6 +77,7 @@ function CallbackContent() {
       setMessage(t.login.callbackProcessing);
 
       try {
+        // Exchange OAuth code for id_token
         const res = await fetch('/api/oauth/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -88,34 +90,67 @@ function CallbackContent() {
 
         const data = await res.json();
         if (!res.ok || !data?.id_token) {
-          throw new Error(data?.error || 'No se pudo obtener el token');
+          throw new Error(data?.error || 'Failed to get token');
         }
 
-        const address = deriveAddress(data.id_token, pending.userSalt, false);
-        const decodedJwt = parseJwt(data.id_token);
+        const jwt = data.id_token;
 
-        const newSession: ZkLoginSession = {
-          provider: parsedState.provider,
-          address,
-          jwt: data.id_token,
-          userSalt: pending.userSalt,
-          maxEpoch: pending.maxEpoch,
-          randomness: pending.randomness,
-          iss: decodedJwt.iss,
-          sub: decodedJwt.sub,
-          aud: decodedJwt.aud,
-          exp: decodedJwt.exp,
-        };
+        // Check if user already exists in AgentBE
+        const saltResponse = await checkExistingUserSalt(jwt, parsedState.provider);
 
-        persistSession(newSession);
-        removePendingLogin(parsedState.nonce);
-        setSession(newSession);
-        setStatus('success');
-        setMessage(t.login.callbackSuccess);
+        if (saltResponse.exists && saltResponse.salt) {
+          // EXISTING USER - Login flow
+          const address = deriveAddress(jwt, saltResponse.salt, false);
+          const loginResponse = await registerOrLoginUser(jwt, address, saltResponse.salt);
+          const decodedJwt = parseJwt(jwt);
 
-        setTimeout(() => {
-          router.push('/onboarding/verify');
-        }, 1400);
+          const newSession: ZkLoginSession = {
+            provider: parsedState.provider,
+            address,
+            jwt,
+            userSalt: saltResponse.salt,
+            maxEpoch: pending.maxEpoch,
+            randomness: pending.randomness,
+            iss: decodedJwt.iss,
+            sub: decodedJwt.sub,
+            aud: decodedJwt.aud,
+            exp: decodedJwt.exp,
+            accessToken: loginResponse.accessToken,
+            isNewUser: false,
+            phoneVerified: loginResponse.user.phoneVerified,
+          };
+
+          persistSession(newSession);
+          removePendingLogin(parsedState.nonce);
+          setSession(newSession);
+          setStatus('success');
+          setMessage(t.login.callbackSuccess);
+
+          setTimeout(() => {
+            // Redirect based on phone verification status
+            if (loginResponse.user.status === 'PENDING_PHONE') {
+              router.push('/auth/verify-phone');
+            } else {
+              router.push('/dashboard');
+            }
+          }, 1400);
+        } else {
+          // NEW USER - Registration flow
+          const newSalt = generateUserSalt();
+
+          // Store JWT in pending for next steps
+          persistPendingLogin(parsedState.nonce, {
+            ...pending,
+            jwt,
+          });
+
+          // Redirect to save-salt page
+          const params = new URLSearchParams({
+            salt: newSalt,
+            provider: parsedState.provider,
+          });
+          router.push(`/auth/save-salt?${params.toString()}`);
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : t.login.callbackError;
         setMessage(msg);

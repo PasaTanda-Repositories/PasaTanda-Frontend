@@ -12,6 +12,7 @@ export type ZkLoginPending = {
   secretKey: string;
   userSalt: string;
   ephemeralPublicKey: string;
+  jwt?: string;
 };
 
 export type ZkLoginSession = {
@@ -25,6 +26,24 @@ export type ZkLoginSession = {
   sub: string;
   aud: string | string[];
   exp?: number;
+  accessToken?: string;
+  isNewUser?: boolean;
+  phoneVerified?: boolean;
+};
+
+export type AgentBESaltResponse = {
+  exists: boolean;
+  salt: string | null;
+};
+
+export type AgentBELoginResponse = {
+  accessToken: string;
+  user: {
+    id: string;
+    suiAddress: string;
+    phoneVerified: boolean;
+    status: 'PENDING_PHONE' | 'ACTIVE';
+  };
 };
 
 const SESSION_KEY = 'zklogin-session';
@@ -55,7 +74,7 @@ function fromBase64<T>(value: string | null): T | null {
   }
 }
 
-function generateUserSalt(): string {
+export function generateUserSalt(): string {
   // El salt debe ser un valor de 16 bytes o menor a 2^128 según la doc de zkLogin
   const array = new Uint8Array(16);
   crypto.getRandomValues(array);
@@ -107,6 +126,13 @@ export function clearSession() {
 export function storePendingLogin(pending: ZkLoginPending) {
   if (typeof window === 'undefined') return;
   sessionStorage.setItem(`${PENDING_PREFIX}${pending.nonce}`, JSON.stringify(pending));
+}
+
+export function persistPendingLogin(nonce: string, updatedPending: Partial<ZkLoginPending>) {
+  if (typeof window === 'undefined') return;
+  const existing = readPendingLogin(nonce) || { nonce };
+  const merged = { ...existing, ...updatedPending, nonce } as ZkLoginPending;
+  sessionStorage.setItem(`${PENDING_PREFIX}${nonce}`, JSON.stringify(merged));
 }
 
 export function readPendingLogin(nonce: string): ZkLoginPending | null {
@@ -214,4 +240,45 @@ export function normalizeAudience(aud: unknown): string | string[] {
   if (Array.isArray(aud)) return aud as string[];
   if (typeof aud === 'string') return aud;
   return [] as string[];
+}
+
+export async function checkExistingUserSalt(jwt: string, provider: OAuthProvider): Promise<AgentBESaltResponse> {
+  const agentUrl = (process.env.NEXT_PUBLIC_AGENT_BE_URL || '').replace(/\/$/, '');
+  if (!agentUrl) throw new Error('NEXT_PUBLIC_AGENT_BE_URL no está configurado');
+
+  const providerUpper = provider.toUpperCase();
+  const res = await fetch(`${agentUrl}/v1/auth/salt`, {
+    headers: {
+      'x-oauth-token': jwt,
+      'x-auth-provider': providerUpper,
+    },
+  });
+
+  if (!res.ok) {
+    throw new Error(`Error consultando salt: ${res.statusText}`);
+  }
+
+  return await res.json();
+}
+
+export async function registerOrLoginUser(
+  jwt: string,
+  suiAddress: string,
+  salt: string
+): Promise<AgentBELoginResponse> {
+  const agentUrl = (process.env.NEXT_PUBLIC_AGENT_BE_URL || '').replace(/\/$/, '');
+  if (!agentUrl) throw new Error('NEXT_PUBLIC_AGENT_BE_URL no está configurado');
+
+  const res = await fetch(`${agentUrl}/v1/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jwt, suiAddress, salt }),
+  });
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error?.message || `Error en login/registro: ${res.statusText}`);
+  }
+
+  return await res.json();
 }
