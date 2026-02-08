@@ -208,10 +208,12 @@ export interface ZkProofResponse {
   addressSeed: string;
 }
 
-/** Response from `POST /tx/sponsor/deploy`. */
+/** Response from `POST /v1/tx/sponsor/deploy`. */
 export interface SponsorDeployResponse {
+  /** Full TransactionData bytes (base64). */
   bytes: string;
-  digest: string;
+  /** Sponsor’s signature over the TransactionData. */
+  sponsorSignature: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -472,14 +472,18 @@ export async function requestZkProof(
 
 /**
  * `POST /v1/tx/sponsor/deploy`
- * Send gasless transaction bytes + group ID to the backend for sponsoring.
+ * Send gasless TransactionKind bytes + sender address to the backend for
+ * sponsoring.  The backend reconstructs the full TransactionData (adding
+ * gas payment owned by the sponsor), signs it, and returns the complete
+ * bytes together with the sponsor’s signature.
  *
  * Auth: Bearer token required.
- * Body: { txBytes, groupId }
+ * Body: { transactionKindBytes, sender, groupId }
  */
 export async function sponsorDeploy(
   accessToken: string,
-  txBytes: string,
+  transactionKindBytes: string,
+  sender: string,
   groupId: string,
 ): Promise<SponsorDeployResponse> {
   const base = agentBaseUrl();
@@ -494,7 +498,7 @@ export async function sponsorDeploy(
         'Content-Type': 'application/json',
         Authorization: `Bearer ${accessToken}`,
       },
-      body: JSON.stringify({ txBytes, groupId }),
+      body: JSON.stringify({ transactionKindBytes, sender, groupId }),
     },
     { groupId },
   );

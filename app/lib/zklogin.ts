@@ -11,7 +11,7 @@
  * in `app/services/api.ts`.
  */
 
-import { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
+import { SuiGrpcClient } from '@mysten/sui/grpc';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import {
   decodeJwt,
@@ -50,7 +50,13 @@ const suiNetwork =
     | 'devnet'
     | 'localnet'
     | undefined) || 'testnet';
-const suiClient = new SuiJsonRpcClient({ url: defaultRpcUrl, network: suiNetwork });
+
+/**
+ * Shared SuiGrpcClient singleton – used by zkLogin helpers and the deploy
+ * flow in the dashboard.  Exported so other modules can reuse it without
+ * creating a second connection.
+ */
+export const suiClient = new SuiGrpcClient({ baseUrl: defaultRpcUrl, network: suiNetwork });
 
 // ---------------------------------------------------------------------------
 // Redirect URI
@@ -248,8 +254,9 @@ export async function buildZkLoginRequest(provider: OAuthProvider) {
 
   if (!clientId) throw new Error(`Missing OAuth clientId for ${provider}`);
 
-  const systemState = await suiClient.getLatestSuiSystemState();
-  const currentEpoch = Number(systemState?.epoch || 0);
+  // Fetch current epoch via the gRPC Core API
+  const { systemState } = await suiClient.core.getCurrentSystemState();
+  const currentEpoch = Number(systemState?.epoch ?? 0);
   const maxEpoch = currentEpoch + 2;
   const randomness = generateRandomness();
   const keypair = Ed25519Keypair.generate();

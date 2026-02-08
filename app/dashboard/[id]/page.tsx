@@ -28,23 +28,20 @@ import type { AgentBEGroupDashboard } from '../../types/zklogin';
 
 // Sui SDK imports for the deploy flow
 import { Transaction } from '@mysten/sui/transactions';
-import { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import {
   genAddressSeed,
-  getExtendedEphemeralPublicKey,
   getZkLoginSignature,
-  generateNonce,
-  generateRandomness,
 } from '@mysten/sui/zklogin';
 import { toBase64, fromBase64 } from '@mysten/sui/utils';
+
+// Shared gRPC client (singleton) from the zkLogin helpers
+import { suiClient } from '../../lib/zklogin';
 
 // --- Constants ---
 const PACKAGE_ID = '0xa48c115fbf1248c9413c3c655b7961bab694a57dd8b3961d4ba54b963c34058a';
 const SUI_COIN_TYPE = '0x2::sui::SUI';
 const CLOCK_OBJECT = '0x6';
-const SUI_RPC_URL = process.env.NEXT_PUBLIC_SUI_RPC_URL ?? 'https://fullnode.testnet.sui.io:443';
-const SUI_NETWORK = (process.env.NEXT_PUBLIC_SUI_NETWORK as 'mainnet' | 'testnet' | 'devnet' | 'localnet' | undefined) ?? 'testnet';
 const VAULT_ADDRESS = process.env.NEXT_PUBLIC_VAULT_ADDRESS ?? '';
 
 type DeployStage =
@@ -142,7 +139,7 @@ export default function DashboardDetailPage() {
     }
   }, [deployStage]);
 
-  // --- Deploy flow ---
+  // --- Deploy flow (new sponsored tx flow following official docs) ---
   const handleStartTanda = useCallback(async () => {
     try {
       // Validate session data
@@ -152,7 +149,8 @@ export default function DashboardDetailPage() {
         !session.secretKey ||
         !session.maxEpoch ||
         !session.randomness ||
-        !session.userSalt
+        !session.userSalt ||
+        !session.address
       ) {
         setDeployError(t.dashboard.deploy.errorMissingSession);
         setDeployStage('error');
@@ -169,19 +167,25 @@ export default function DashboardDetailPage() {
         return;
       }
 
-      // ---- Phase A: Build the PTB (gasless) ----
+      // The zkLogin address of the current user (sender)
+      const zkLoginUserAddress = session.address;
+
+      // ---- Phase A: Build the PTB (TransactionKind only) ----
+      // Docs ref: contratoins.md §1 + isntruccionesreales.md §4-§5
       setDeployStage('building');
 
-      const client = new SuiJsonRpcClient({ url: SUI_RPC_URL, network: SUI_NETWORK });
       const tx = new Transaction();
 
-      // Build create_tanda call
+      // IMPORTANT: sender must be the zkLogin address of the user
+      tx.setSender(zkLoginUserAddress);
+
+      // Build create_tanda moveCall
       const contributionAmountRaw = data?.group?.contributionAmount ?? 0;
       const guaranteeAmountRaw = data?.group?.guaranteeAmount ?? 0;
       const contributionMist = BigInt(Math.round(Number(contributionAmountRaw) * 1_000_000_000));
       const guaranteeMist = BigInt(Math.round(Number(guaranteeAmountRaw) * 1_000_000_000));
 
-      // Fiat vault option: Option<address>
+      // Option<address> for the fiat vault
       const fiatVaultOption = VAULT_ADDRESS
         ? tx.pure.option('address', VAULT_ADDRESS)
         : tx.pure.option('address', null);
@@ -198,9 +202,12 @@ export default function DashboardDetailPage() {
         ],
       });
 
-      // Build gasless tx bytes (TransactionKind only)
-      const gaslessTxBytes = await tx.build({ client, onlyTransactionKind: true });
-      const gaslessTxB64 = toBase64(gaslessTxBytes);
+      // Build ONLY the TransactionKind bytes (no gas info) for sponsoring
+      const kindBytes = await tx.build({
+        client: suiClient,
+        onlyTransactionKind: true,
+      });
+      const kindBytesB64 = toBase64(kindBytes);
 
       // ---- Phase B: Request ZK proof from backend ----
       setDeployStage('requestingProof');
@@ -208,11 +215,11 @@ export default function DashboardDetailPage() {
       const ephemeralKp = Ed25519Keypair.fromSecretKey(
         fromBase64(session.secretKey),
       );
-      const extendedEphPk = getExtendedEphemeralPublicKey(
-        ephemeralKp.getPublicKey(),
-      );
 
       const maxEpochNum = Number(session.maxEpoch);
+
+      // Use the stored extended ephemeral public key
+      const extendedEphPk = session.ephemeralPublicKey!;
 
       const zkProofResp = await requestZkProof(session.jwt, {
         ephemeralPublicKey: extendedEphPk,
@@ -222,21 +229,29 @@ export default function DashboardDetailPage() {
       });
 
       // ---- Phase C: Sponsor transaction ----
+      // Docs ref: isntruccionesreales.md §5-§6
+      // Send TransactionKind bytes + sender to backend.
+      // Backend adds gas payment, signs as sponsor, returns full
+      // TransactionData bytes + sponsorSignature.
       setDeployStage('sponsoring');
 
       const sponsorResp = await sponsorDeploy(
         session.accessToken,
-        gaslessTxB64,
+        kindBytesB64,
+        zkLoginUserAddress,
         groupId!,
       );
 
-      // ---- Phase D: Sign the sponsored transaction ----
+      // ---- Phase D: Sign the sponsored TransactionData ----
+      // Docs ref: isntruccionesreales.md §7 + contratoins.md §4
       setDeployStage('signing');
 
-      // Reconstruct the full transaction from the sponsored bytes
+      // Reconstruct the full Transaction from the sponsored bytes
       const sponsoredTx = Transaction.from(sponsorResp.bytes);
+
+      // Sign with the ephemeral keypair (same one used for the ZK proof)
       const { bytes: signedTxBytes, signature: ephSig } = await sponsoredTx.sign({
-        client,
+        client: suiClient,
         signer: ephemeralKp,
       });
 
@@ -260,20 +275,24 @@ export default function DashboardDetailPage() {
         userSignature: ephSig,
       });
 
-      // ---- Phase E: Execute on-chain ----
+      // ---- Phase E: Execute on-chain with BOTH signatures ----
+      // Docs ref: isntruccionesreales.md §8
+      // A sponsored transaction requires two signatures over the same
+      // TransactionData: the user's zkLogin signature and the sponsor's
+      // normal signature.
       setDeployStage('executing');
 
-      const executeResult = await client.executeTransactionBlock({
-        transactionBlock: signedTxBytes,
-        signature: zkLoginSig,
-        options: { showEffects: true, showObjectChanges: true },
+      const executeResult = await suiClient.core.executeTransaction({
+        transaction: fromBase64(signedTxBytes),
+        signatures: [zkLoginSig, sponsorResp.sponsorSignature],
+        include: { effects: true },
       });
 
-      if (
-        executeResult.effects?.status?.status === 'failure'
-      ) {
+      // Check for on-chain failure
+      if (executeResult.$kind === 'FailedTransaction') {
         throw new Error(
-          executeResult.effects.status.error ?? 'Transaction failed on-chain',
+          executeResult.FailedTransaction?.status.error?.message ??
+            'Transaction failed on-chain',
         );
       }
 
