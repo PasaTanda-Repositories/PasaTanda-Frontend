@@ -34,10 +34,8 @@ import {
   genAddressSeed,
   getExtendedEphemeralPublicKey,
   getZkLoginSignature,
-  generateNonce,
-  generateRandomness,
 } from '@mysten/sui/zklogin';
-import { toBase64, fromBase64 } from '@mysten/sui/utils';
+import { toBase64 } from '@mysten/sui/utils';
 
 // --- Constants ---
 const PACKAGE_ID = '0xa48c115fbf1248c9413c3c655b7961bab694a57dd8b3961d4ba54b963c34058a';
@@ -46,6 +44,15 @@ const CLOCK_OBJECT = '0x6';
 const SUI_RPC_URL = process.env.NEXT_PUBLIC_SUI_RPC_URL ?? 'https://fullnode.testnet.sui.io:443';
 const SUI_NETWORK = (process.env.NEXT_PUBLIC_SUI_NETWORK as 'mainnet' | 'testnet' | 'devnet' | 'localnet' | undefined) ?? 'testnet';
 const VAULT_ADDRESS = process.env.NEXT_PUBLIC_VAULT_ADDRESS ?? '';
+const DEPLOY_LOG_PREFIX = '[dashboard][deploy]';
+
+const logDeploy = (...args: unknown[]) => {
+  console.info(DEPLOY_LOG_PREFIX, ...args);
+};
+
+const logDeployError = (...args: unknown[]) => {
+  console.error(DEPLOY_LOG_PREFIX, ...args);
+};
 
 type DeployStage =
   | 'idle'
@@ -113,7 +120,7 @@ export default function DashboardDetailPage() {
 
   const participants = data?.participants ?? [];
   const transactions = data?.transactions ?? [];
-  const memberAddresses = data?.memberAddresses ?? [];
+  const memberAddresses = useMemo(() => data?.memberAddresses ?? [], [data?.memberAddresses]);
   const participantsCount = participants.length;
   const hasConfig = Boolean(
     data?.group?.contributionAmount &&
@@ -144,12 +151,17 @@ export default function DashboardDetailPage() {
 
   // --- Deploy flow ---
   const handleStartTanda = useCallback(async () => {
+    logDeploy('Deploy requested', {
+      groupId,
+      status: data?.group?.status,
+      participants: data?.participants?.length ?? 0,
+    });
     try {
       // Validate session data
       if (
         !session?.accessToken ||
         !session.jwt ||
-        !session.secretKey ||
+        typeof session.secretKey !== 'string' ||
         !session.maxEpoch ||
         !session.randomness ||
         !session.userSalt
@@ -157,6 +169,10 @@ export default function DashboardDetailPage() {
         setDeployError(t.dashboard.deploy.errorMissingSession);
         setDeployStage('error');
         return;
+      }
+
+      if (!groupId) {
+        throw new Error('Missing group identifier');
       }
 
       // Validate member addresses
@@ -169,17 +185,28 @@ export default function DashboardDetailPage() {
         return;
       }
 
+      logDeploy('Validation complete', {
+        groupId,
+        validAddresses: validAddresses.length,
+      });
+
       // ---- Phase A: Build the PTB (gasless) ----
       setDeployStage('building');
 
       const client = new SuiJsonRpcClient({ url: SUI_RPC_URL, network: SUI_NETWORK });
       const tx = new Transaction();
+      tx.setSender(session.address!);
 
       // Build create_tanda call
-      const contributionAmountRaw = data?.group?.contributionAmount ?? 0;
-      const guaranteeAmountRaw = data?.group?.guaranteeAmount ?? 0;
-      const contributionMist = BigInt(Math.round(Number(contributionAmountRaw) * 1_000_000_000));
-      const guaranteeMist = BigInt(Math.round(Number(guaranteeAmountRaw) * 1_000_000_000));
+      const contributionAmountRaw = Number(data?.group?.contributionAmount ?? 0);
+      const guaranteeAmountRaw = Number(data?.group?.guaranteeAmount ?? 0);
+
+      if (!Number.isFinite(contributionAmountRaw) || !Number.isFinite(guaranteeAmountRaw)) {
+        throw new Error('Invalid contribution or guarantee amount');
+      }
+
+      const contributionMist = BigInt(Math.round(contributionAmountRaw * 1_000_000_000));
+      const guaranteeMist = BigInt(Math.round(guaranteeAmountRaw * 1_000_000_000));
 
       // Fiat vault option: Option<address>
       const fiatVaultOption = VAULT_ADDRESS
@@ -202,23 +229,54 @@ export default function DashboardDetailPage() {
       const gaslessTxBytes = await tx.build({ client, onlyTransactionKind: true });
       const gaslessTxB64 = toBase64(gaslessTxBytes);
 
+      logDeploy('Phase A complete', {
+        contributionMist: contributionMist.toString(),
+        guaranteeMist: guaranteeMist.toString(),
+        addressCount: validAddresses.length,
+        gaslessBytesLength: gaslessTxBytes.length,
+      });
+
       // ---- Phase B: Request ZK proof from backend ----
       setDeployStage('requestingProof');
 
-      const ephemeralKp = Ed25519Keypair.fromSecretKey(
-        fromBase64(session.secretKey),
-      );
+      // session.secretKey is a bech32-encoded string ("suiprivkey1q...")
+      // returned by Ed25519Keypair.getSecretKey() in Sui SDK v2.x.
+      // Ed25519Keypair.fromSecretKey() accepts this format directly.
+      logDeploy('Reconstructing ephemeral keypair', {
+        secretKeyFormat: session.secretKey.substring(0, 14) + '...',
+        secretKeyLength: session.secretKey.length,
+      });
+
+      const ephemeralKp = Ed25519Keypair.fromSecretKey(session.secretKey);
       const extendedEphPk = getExtendedEphemeralPublicKey(
         ephemeralKp.getPublicKey(),
       );
 
       const maxEpochNum = Number(session.maxEpoch);
+      if (!Number.isFinite(maxEpochNum)) {
+        throw new Error('Invalid maxEpoch value');
+      }
+
+      logDeploy('Phase B requesting proof', {
+        maxEpochNum,
+        randomnessLength: session.randomness.length,
+      });
 
       const zkProofResp = await requestZkProof(session.jwt, {
-        ephemeralPublicKey: extendedEphPk,
+        extendedEphemeralPublicKey: extendedEphPk,
         maxEpoch: maxEpochNum,
         randomness: session.randomness,
-        network: 'testnet',
+        salt: session.userSalt,
+        keyClaimName: 'sub',
+      });
+
+      if (!zkProofResp.proofPoints) {
+        throw new Error('Backend returned empty proof points');
+      }
+
+      logDeploy('Phase B proof received', {
+        headerLength: zkProofResp.headerBase64.length,
+        proofA: zkProofResp.proofPoints.a.length,
       });
 
       // ---- Phase C: Sponsor transaction ----
@@ -230,6 +288,15 @@ export default function DashboardDetailPage() {
         groupId!,
       );
 
+      if (!sponsorResp?.bytes || typeof sponsorResp.bytes !== 'string') {
+        throw new Error('Invalid sponsor response bytes');
+      }
+
+      logDeploy('Phase C sponsor response received', {
+        digest: sponsorResp.digest,
+        bytesLength: sponsorResp.bytes.length,
+      });
+
       // ---- Phase D: Sign the sponsored transaction ----
       setDeployStage('signing');
 
@@ -240,8 +307,20 @@ export default function DashboardDetailPage() {
         signer: ephemeralKp,
       });
 
+      logDeploy('Phase D signed transaction', {
+        signedBytesLength: signedTxBytes.length,
+        ephSigLength: ephSig.length,
+      });
+
       // Assemble the zkLogin composite signature
       const aud = Array.isArray(session.aud) ? session.aud[0] : session.aud;
+
+      logDeploy('Phase D assembling zkLogin signature', {
+        userSaltPrefix: session.userSalt.substring(0, 8) + '...',
+        sub: session.sub ? session.sub.substring(0, 8) + '...' : 'MISSING',
+        aud: typeof aud === 'string' ? aud.substring(0, 20) + '...' : 'MISSING',
+      });
+
       const addressSeed = genAddressSeed(
         BigInt(session.userSalt),
         'sub',
@@ -251,7 +330,7 @@ export default function DashboardDetailPage() {
 
       const zkLoginSig = getZkLoginSignature({
         inputs: {
-          proofPoints: zkProofResp.proofPoints!,
+          proofPoints: zkProofResp.proofPoints,
           addressSeed,
           headerBase64: zkProofResp.headerBase64,
           issBase64Details: zkProofResp.issBase64Details,
@@ -277,6 +356,11 @@ export default function DashboardDetailPage() {
         );
       }
 
+      logDeploy('Phase E execution complete', {
+        effectsStatus: executeResult.effects?.status?.status,
+        digest: executeResult.effects?.transactionDigest ?? sponsorResp.digest,
+      });
+
       setDeployStage('success');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -293,6 +377,7 @@ export default function DashboardDetailPage() {
       setDeployError(
         stageErrorMap[deployStage] ? `${stageErrorMap[deployStage]}: ${msg}` : msg,
       );
+      logDeployError('Deploy failed', { stage: deployStage, error: msg });
       setDeployStage('error');
     }
   }, [session, memberAddresses, data, groupId, t, deployStage]);

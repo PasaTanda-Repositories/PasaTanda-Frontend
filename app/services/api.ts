@@ -446,10 +446,11 @@ export async function startGroup(
 export async function requestZkProof(
   jwt: string,
   payload: {
-    ephemeralPublicKey: string;
+    extendedEphemeralPublicKey: string;
     maxEpoch: number;
     randomness: string;
-    network: string;
+    salt: string;
+    keyClaimName?: string;
   },
 ): Promise<ZkProofResponse> {
   const base = agentBaseUrl();
@@ -462,11 +463,21 @@ export async function requestZkProof(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'zklogin-jwt': jwt,
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        jwt,
+        extendedEphemeralPublicKey: payload.extendedEphemeralPublicKey,
+        maxEpoch: String(payload.maxEpoch),
+        jwtRandomness: payload.randomness,
+        salt: payload.salt,
+        keyClaimName: payload.keyClaimName ?? 'sub',
+      }),
     },
-    { maxEpoch: payload.maxEpoch, network: payload.network },
+    {
+      maxEpoch: payload.maxEpoch,
+      hasSalt: Boolean(payload.salt),
+      keyClaimName: payload.keyClaimName ?? 'sub',
+    },
   );
 }
 

@@ -13,6 +13,7 @@
 
 import { SuiJsonRpcClient } from '@mysten/sui/jsonRpc';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
+
 import {
   decodeJwt,
   generateNonce,
@@ -70,13 +71,13 @@ export function getStoredRedirectUri(): string {
 // Base64 helpers
 // ---------------------------------------------------------------------------
 
-function toBase64(json: unknown): string {
+function encodeJsonToBase64(json: unknown): string {
   return typeof window === 'undefined'
     ? ''
     : btoa(unescape(encodeURIComponent(JSON.stringify(json))));
 }
 
-function fromBase64<T>(value: string | null): T | null {
+function decodeJsonFromBase64<T>(value: string | null): T | null {
   if (!value || typeof window === 'undefined') return null;
   try {
     return JSON.parse(decodeURIComponent(escape(atob(value)))) as T;
@@ -85,8 +86,42 @@ function fromBase64<T>(value: string | null): T | null {
   }
 }
 
+/**
+ * Normalize a serialized secret key to a bech32 string ("suiprivkey1q...").
+ *
+ * Handles three legacy formats that may exist in storage:
+ *   1. Already a bech32 string ("suiprivkey1q...")  → return as-is.
+ *   2. A JSON-serialized Uint8Array ({"0":42,"1":17,...}) → extract bytes,
+ *      reconstruct the keypair, and return the bech32 string.
+ *   3. Anything else → null.
+ */
+function normalizeSerializedSecretKey(value: unknown): string | null {
+  if (typeof value === 'string') return value;
+  if (!value || typeof value !== 'object') return null;
+
+  const record = value as Record<string, unknown>;
+  const numericKeys = Object.keys(record).filter((key) => /^\d+$/.test(key));
+  if (numericKeys.length === 0) return null;
+
+  numericKeys.sort((a, b) => Number(a) - Number(b));
+  const byteValues = numericKeys
+    .map((key) => record[key])
+    .filter((byte): byte is number => typeof byte === 'number' && Number.isFinite(byte))
+    .map((byte) => Math.max(0, Math.min(255, byte)));
+
+  if (byteValues.length === 0) return null;
+
+  // Re-create the keypair from the raw bytes and return the proper bech32 string
+  try {
+    const kp = Ed25519Keypair.fromSecretKey(new Uint8Array(byteValues));
+    return kp.getSecretKey();
+  } catch {
+    return null;
+  }
+}
+
 export function decodeState<T>(value: string | null): T | null {
-  return fromBase64<T>(value);
+  return decodeJsonFromBase64<T>(value);
 }
 
 // ---------------------------------------------------------------------------
@@ -132,6 +167,10 @@ export function getStoredSession(): ZkLoginSession | null {
       clearSession();
       return null;
     }
+    const normalizedSecretKey = normalizeSerializedSecretKey((session as { secretKey?: unknown }).secretKey);
+    if (normalizedSecretKey) {
+      session.secretKey = normalizedSecretKey;
+    }
     return session;
   } catch {
     return null;
@@ -176,7 +215,12 @@ export function readPendingLogin(nonce: string): ZkLoginPending | null {
   const raw = sessionStorage.getItem(`${PENDING_PREFIX}${nonce}`);
   if (!raw) return null;
   try {
-    return JSON.parse(raw) as ZkLoginPending;
+    const pending = JSON.parse(raw) as ZkLoginPending & { secretKey?: unknown };
+    const normalizedSecretKey = normalizeSerializedSecretKey(pending.secretKey);
+    if (normalizedSecretKey) {
+      pending.secretKey = normalizedSecretKey;
+    }
+    return pending as ZkLoginPending;
   } catch {
     return null;
   }
@@ -266,15 +310,19 @@ export async function buildZkLoginRequest(provider: OAuthProvider) {
     typeof window !== 'undefined' ? window.location.origin : undefined,
   );
 
-  const state = toBase64({ nonce, provider });
+  const state = encodeJsonToBase64({ nonce, provider });
   const authUrl = buildAuthUrl(provider, { clientId, nonce, redirectUri, state });
+
+  // getSecretKey() returns a bech32-encoded string ("suiprivkey1q...")
+  // in Sui SDK v2.x — store it directly.
+  const secretKey = keypair.getSecretKey();
 
   storePendingLogin({
     provider,
     nonce,
     maxEpoch: String(maxEpoch),
     randomness,
-    secretKey: keypair.getSecretKey(),
+    secretKey,
     userSalt,
     ephemeralPublicKey: getExtendedEphemeralPublicKey(keypair.getPublicKey()),
   });
