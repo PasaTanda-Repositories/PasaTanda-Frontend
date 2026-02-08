@@ -26,6 +26,8 @@ import type {
   AgentBEGroupDashboard,
   AgentBEStartGroupResponse,
   GroupInviteLookup,
+  ZkProofResponse,
+  SponsorDeployResponse,
 } from '../types/zklogin';
 
 const TAG = 'ApiService';
@@ -431,7 +433,75 @@ export async function startGroup(
 }
 
 // ---------------------------------------------------------------------------
-// 4. Local OAuth proxy (Next.js API route)
+// 4. zkLogin ZK-proof & Sponsored Transactions
+// ---------------------------------------------------------------------------
+
+/**
+ * `POST /v1/auth/zkp`
+ * Request a zero-knowledge proof from the backend (Enoki).
+ *
+ * Header: zklogin-jwt (required)
+ * Body: { ephemeralPublicKey, maxEpoch, randomness, network }
+ */
+export async function requestZkProof(
+  jwt: string,
+  payload: {
+    ephemeralPublicKey: string;
+    maxEpoch: number;
+    randomness: string;
+    network: string;
+  },
+): Promise<ZkProofResponse> {
+  const base = agentBaseUrl();
+  if (!base) throw new Error('NEXT_PUBLIC_AGENT_BE_URL is not configured');
+
+  return request<ZkProofResponse>(
+    'requestZkProof',
+    `${base}/v1/auth/zkp`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'zklogin-jwt': jwt,
+      },
+      body: JSON.stringify(payload),
+    },
+    { maxEpoch: payload.maxEpoch, network: payload.network },
+  );
+}
+
+/**
+ * `POST /v1/tx/sponsor/deploy`
+ * Send gasless transaction bytes + group ID to the backend for sponsoring.
+ *
+ * Auth: Bearer token required.
+ * Body: { txBytes, groupId }
+ */
+export async function sponsorDeploy(
+  accessToken: string,
+  txBytes: string,
+  groupId: string,
+): Promise<SponsorDeployResponse> {
+  const base = agentBaseUrl();
+  if (!base) throw new Error('NEXT_PUBLIC_AGENT_BE_URL is not configured');
+
+  return request<SponsorDeployResponse>(
+    'sponsorDeploy',
+    `${base}/v1/tx/sponsor/deploy`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ txBytes, groupId }),
+    },
+    { groupId },
+  );
+}
+
+// ---------------------------------------------------------------------------
+// 5. Local OAuth proxy (Next.js API route)
 // ---------------------------------------------------------------------------
 
 /**

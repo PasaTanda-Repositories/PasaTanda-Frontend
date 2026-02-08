@@ -46,6 +46,10 @@ export interface ZkLoginSession {
   accessToken?: string;
   isNewUser?: boolean;
   phoneVerified?: boolean;
+  /** Base-64 encoded Ed25519 secret key for signing sponsored txs. */
+  secretKey?: string;
+  /** Extended ephemeral public key (used for ZK proof requests). */
+  ephemeralPublicKey?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -175,12 +179,39 @@ export interface AgentBEGroupDashboard {
     qrImageLink?: string | null;
     createdAt?: string | null;
   }>;
+  /** Ordered array of Sui addresses for each participant (null if not yet derived). */
+  memberAddresses?: Array<string | null>;
   myStatus?: string;
 }
 
 /** Response from `POST /v1/groups/{id}/start`. */
 export interface AgentBEStartGroupResponse {
   status?: string;
+}
+
+// ---------------------------------------------------------------------------
+// AgentBE – zkLogin & Sponsored Transactions
+// ---------------------------------------------------------------------------
+
+/** Response from `POST /v1/auth/zkp`. */
+export interface ZkProofResponse {
+  proofPoints: {
+    a: string[];
+    b: string[][];
+    c: string[];
+  } | null;
+  issBase64Details: {
+    value: string;
+    indexMod4: number;
+  };
+  headerBase64: string;
+  addressSeed: string;
+}
+
+/** Response from `POST /tx/sponsor/deploy`. */
+export interface SponsorDeployResponse {
+  bytes: string;
+  digest: string;
 }
 
 // ---------------------------------------------------------------------------

@@ -180,7 +180,7 @@ export default function DashboardPage() {
                             variant="outlined"
                             size="large"
                             startIcon={<GroupAddIcon />}
-                            onClick={() => router.push('/pagos')}
+                            onClick={() => router.push('/group/join')}
                             sx={{
                               borderColor: '#000',
                               color: '#000',
@@ -215,7 +215,7 @@ export default function DashboardPage() {
                       <Button
                         variant="outlined"
                         startIcon={<GroupAddIcon />}
-                        onClick={() => router.push('/pagos')}
+                        onClick={() => router.push('/groups/join')}
                         sx={{
                           borderColor: '#000',
                           color: '#000',

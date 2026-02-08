@@ -128,6 +128,8 @@ function ConfirmAccountContent() {
         accessToken: response.accessToken,
         isNewUser: true,
         phoneVerified: response.user.phoneVerified,
+        secretKey: pending.secretKey,
+        ephemeralPublicKey: pending.ephemeralPublicKey,
       };
 
       persistSession(session);

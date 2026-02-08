@@ -117,6 +117,8 @@ function CallbackContent() {
             accessToken: loginResponse.accessToken,
             isNewUser: false,
             phoneVerified: loginResponse.user.phoneVerified,
+            secretKey: pending.secretKey,
+            ephemeralPublicKey: pending.ephemeralPublicKey,
           };
 
           persistSession(newSession);
